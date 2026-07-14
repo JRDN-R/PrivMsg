@@ -1,0 +1,1394 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#111315">
+  <title>PrivMsg</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%23282b2f'/%3E%3Cpath d='M9 10.5h14v9.3a3.2 3.2 0 0 1-3.2 3.2H15l-4.6 3v-3.1A3.2 3.2 0 0 1 9 19.8z' fill='none' stroke='%23e8eaec' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #111315;
+      --bg-raised: #16181a;
+      --surface: #1c1f22;
+      --surface-2: #24272b;
+      --surface-3: #2b2f33;
+      --border: #303438;
+      --border-strong: #3c4146;
+      --text: #f2f3f4;
+      --muted: #9ba1a7;
+      --faint: #6f757b;
+      --accent: #dce1e5;
+      --accent-ink: #17191b;
+      --accent-soft: #9aa9b6;
+      --danger: #df7b76;
+      --success: #8fb39c;
+      --shadow: 0 18px 55px rgba(0, 0, 0, .35);
+      --radius: 22px;
+      --font: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { height: 100%; background: var(--bg); }
+    body {
+      min-height: 100%;
+      margin: 0;
+      overflow-x: hidden;
+      background:
+        radial-gradient(900px 560px at 50% -260px, rgba(148, 160, 171, .11), transparent 68%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, textarea { font: inherit; }
+    button { color: inherit; }
+    button, [role="button"] { -webkit-tap-highlight-color: transparent; }
+    ::selection { background: rgba(169, 183, 195, .28); }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #383c40; border: 2px solid var(--bg); border-radius: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    body:not(.authorized) .app-header,
+    body:not(.authorized) .thread,
+    body:not(.authorized) .composer-region,
+    body:not(.authorized) .scroll-bottom,
+    body:not(.authorized) .drop-overlay {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .auth-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(720px 460px at 50% 18%, rgba(148, 160, 171, .12), transparent 70%),
+        var(--bg);
+    }
+    .auth-gate[hidden] { display: none; }
+    .auth-card {
+      width: min(390px, 100%);
+      padding: 32px;
+      border: 1px solid var(--border);
+      border-radius: 25px;
+      background: rgba(28, 31, 34, .94);
+      box-shadow: var(--shadow), inset 0 1px rgba(255,255,255,.035);
+      text-align: center;
+    }
+    .auth-mark {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 19px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #3b4045;
+      border-radius: 18px;
+      background: linear-gradient(145deg, #30353a, #202326);
+      color: #e8eaec;
+      box-shadow: inset 0 1px rgba(255,255,255,.07);
+    }
+    .auth-mark svg { width: 26px; height: 26px; }
+    .auth-card h1 { margin: 0; font-size: 21px; font-weight: 680; letter-spacing: -.03em; }
+    .auth-card > p { margin: 9px auto 23px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .google-button {
+      width: 100%;
+      min-height: 48px;
+      padding: 11px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 11px;
+      border: 1px solid #4a4f54;
+      border-radius: 13px;
+      background: #f2f3f4;
+      color: #202225;
+      font-size: 14px;
+      font-weight: 650;
+      cursor: pointer;
+      transition: background .15s, transform .08s, opacity .15s;
+    }
+    .google-button:hover:not(:disabled) { background: #fff; }
+    .google-button:active:not(:disabled) { transform: scale(.985); }
+    .google-button:disabled { opacity: .52; cursor: default; }
+    .google-button svg { width: 18px; height: 18px; flex: 0 0 auto; }
+    .auth-status {
+      min-height: 19px;
+      margin: 14px 2px 0;
+      color: var(--muted);
+      font-size: 11.5px;
+      line-height: 1.45;
+    }
+    .auth-status.error { color: #eda29d; }
+    .auth-foot { margin-top: 18px; color: var(--faint); font-size: 10.5px; }
+
+    .app-header {
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 30;
+      height: 68px;
+      padding: 0 max(18px, env(safe-area-inset-right)) 0 max(18px, env(safe-area-inset-left));
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, .055);
+      background: rgba(17, 19, 21, .82);
+      backdrop-filter: blur(20px) saturate(130%);
+      -webkit-backdrop-filter: blur(20px) saturate(130%);
+    }
+
+    .header-inner {
+      width: min(760px, 100%);
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .identity { min-width: 0; display: flex; align-items: center; gap: 11px; }
+    .avatar {
+      width: 38px;
+      height: 38px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border: 1px solid #3b4045;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #30353a, #202326);
+      box-shadow: inset 0 1px rgba(255,255,255,.07);
+    }
+    .avatar svg { width: 19px; height: 19px; }
+    .identity-copy { min-width: 0; }
+    .identity h1 { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.2; letter-spacing: -.01em; }
+    .identity p { margin: 4px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1; }
+
+    .connection {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .connection-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--faint);
+      box-shadow: 0 0 0 3px rgba(111,117,123,.1);
+    }
+    .connection[data-state="online"] .connection-dot { background: var(--success); box-shadow: 0 0 0 3px rgba(143,179,156,.1); }
+    .connection[data-state="error"] { color: var(--danger); }
+    .connection[data-state="error"] .connection-dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(223,123,118,.1); }
+    .connection[data-state="connecting"] .connection-dot { animation: breathe 1.4s ease-in-out infinite; }
+    @keyframes breathe { 50% { opacity: .25; } }
+
+    .thread {
+      width: min(760px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 96px 18px 190px;
+    }
+
+    .empty-state {
+      min-height: calc(100vh - 300px);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty-state[hidden] { display: none; }
+    .empty-inner { transform: translateY(-5%); }
+    .empty-icon {
+      width: 54px;
+      height: 54px;
+      margin: 0 auto 17px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: linear-gradient(145deg, var(--surface-2), var(--surface));
+      color: #c9ced2;
+      box-shadow: var(--shadow);
+    }
+    .empty-icon svg { width: 24px; height: 24px; }
+    .empty-state h2 { margin: 0; color: var(--text); font-size: 17px; font-weight: 620; letter-spacing: -.02em; }
+    .empty-state p { max-width: 310px; margin: 8px auto 0; font-size: 13px; line-height: 1.55; }
+
+    .day-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 26px 0 18px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .day-divider::before, .day-divider::after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,.055); }
+
+    .message-row { display: flex; justify-content: flex-end; margin: 0 0 12px; }
+    .message {
+      position: relative;
+      width: fit-content;
+      max-width: min(84%, 620px);
+      overflow: hidden;
+      border: 1px solid #34383c;
+      border-radius: 22px 22px 7px 22px;
+      background: linear-gradient(145deg, #282c2f, #232629);
+      box-shadow: 0 7px 24px rgba(0,0,0,.14);
+    }
+    .message.has-images { width: min(84%, 520px); }
+    .message-text {
+      margin: 0;
+      padding: 12px 15px 5px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--text);
+      font-size: 14.5px;
+      line-height: 1.55;
+    }
+    .message-text:first-child { padding-top: 13px; }
+
+    .gallery {
+      display: grid;
+      gap: 2px;
+      padding: 3px;
+      background: #1d2022;
+    }
+    .gallery.one { grid-template-columns: 1fr; }
+    .gallery.two { grid-template-columns: repeat(2, 1fr); }
+    .gallery.many { grid-template-columns: repeat(2, 1fr); }
+    .gallery.many .media-tile:first-child:nth-last-child(3) { grid-row: span 2; }
+    .media-tile {
+      position: relative;
+      min-height: 130px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 9px;
+      background: #191b1d;
+      cursor: zoom-in;
+    }
+    .gallery.one .media-tile { min-height: 220px; max-height: 430px; }
+    .media-tile img { display: block; width: 100%; height: 100%; min-height: inherit; object-fit: cover; }
+    .media-placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--faint);
+      background: linear-gradient(105deg, #1c1f21 25%, #25282b 45%, #1c1f21 65%);
+      background-size: 220% 100%;
+      animation: shimmer 1.4s linear infinite;
+    }
+    .media-placeholder svg { width: 24px; height: 24px; }
+    .media-tile.loaded .media-placeholder { display: none; }
+    .media-tile.failed .media-placeholder { animation: none; background: #1c1f21; }
+    @keyframes shimmer { to { background-position: -220% 0; } }
+
+    .message-foot {
+      min-height: 29px;
+      padding: 5px 8px 7px 15px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+    .message-time { margin-right: 2px; color: #8c9297; font-size: 10.5px; white-space: nowrap; }
+    .mini-action {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: #8f959a;
+      opacity: 0;
+      cursor: pointer;
+      transition: opacity .15s, color .15s, background .15s;
+    }
+    .message:hover .mini-action, .mini-action:focus-visible { opacity: 1; }
+    .mini-action:hover { color: var(--text); background: rgba(255,255,255,.07); }
+    .mini-action.danger:hover { color: var(--danger); }
+    .mini-action svg { width: 14px; height: 14px; }
+
+    .composer-region {
+      position: fixed;
+      inset: auto 0 0;
+      z-index: 35;
+      padding: 50px max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+      background: linear-gradient(to bottom, rgba(17,19,21,0), rgba(17,19,21,.92) 40%, var(--bg) 72%);
+      pointer-events: none;
+    }
+    .composer-wrap { position: relative; width: min(760px, 100%); margin: 0 auto; pointer-events: auto; }
+    .attachment-menu {
+      position: absolute;
+      left: 7px;
+      bottom: calc(100% + 10px);
+      z-index: 4;
+      width: 205px;
+      padding: 7px;
+      border: 1px solid var(--border-strong);
+      border-radius: 15px;
+      background: rgba(37,40,43,.98);
+      box-shadow: var(--shadow);
+      transform-origin: bottom left;
+      animation: menu-in .14s ease-out;
+    }
+    .attachment-menu[hidden] { display: none; }
+    @keyframes menu-in { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+    .menu-item {
+      width: 100%;
+      padding: 10px 11px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text);
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .menu-item:hover { background: rgba(255,255,255,.065); }
+    .menu-item svg { width: 17px; height: 17px; color: #aeb6bd; }
+
+    .composer {
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: 25px;
+      background: rgba(29,32,35,.97);
+      box-shadow: 0 15px 50px rgba(0,0,0,.34), inset 0 1px rgba(255,255,255,.035);
+      transition: border-color .16s, box-shadow .16s;
+    }
+    .composer:focus-within { border-color: #535a60; box-shadow: 0 15px 50px rgba(0,0,0,.34), 0 0 0 3px rgba(153,166,177,.07); }
+    .staged-tray {
+      display: flex;
+      gap: 9px;
+      overflow-x: auto;
+      padding: 12px 12px 4px;
+      scrollbar-width: thin;
+    }
+    .staged-tray:empty { display: none; }
+    .staged-item {
+      position: relative;
+      width: 76px;
+      height: 76px;
+      flex: 0 0 auto;
+      overflow: hidden;
+      border: 1px solid #3b4044;
+      border-radius: 13px;
+      background: var(--surface-2);
+    }
+    .staged-item img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .remove-staged {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 50%;
+      background: rgba(15,17,18,.82);
+      color: white;
+      cursor: pointer;
+    }
+    .remove-staged svg { width: 11px; height: 11px; }
+
+    .compose-row { display: flex; align-items: flex-end; gap: 8px; padding: 10px 10px 10px 11px; }
+    .round-button {
+      width: 39px;
+      height: 39px;
+      flex: 0 0 auto;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform .12s, background .15s, color .15s;
+    }
+    .round-button:active { transform: scale(.94); }
+    .attach-button { background: transparent; color: #c3c8cc; }
+    .attach-button:hover, .attach-button[aria-expanded="true"] { background: rgba(255,255,255,.07); color: white; }
+    .attach-button svg { width: 23px; height: 23px; transition: transform .16s; }
+    .attach-button[aria-expanded="true"] svg { transform: rotate(45deg); }
+    .send-button { background: var(--accent); color: var(--accent-ink); }
+    .send-button:hover:not(:disabled) { background: #f2f4f5; }
+    .send-button:disabled { background: #303438; color: #70767b; cursor: default; }
+    .send-button svg { width: 20px; height: 20px; }
+
+    #messageInput {
+      width: 100%;
+      min-height: 39px;
+      max-height: 160px;
+      padding: 9px 4px 7px;
+      resize: none;
+      overflow-y: auto;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    #messageInput::placeholder { color: #7c8287; }
+    .composer-meta {
+      min-height: 17px;
+      padding: 0 15px 7px;
+      display: flex;
+      justify-content: flex-end;
+      color: var(--faint);
+      font-size: 10.5px;
+    }
+    .composer-meta:empty { display: none; }
+
+    .drop-overlay {
+      position: fixed;
+      inset: 14px;
+      z-index: 90;
+      display: grid;
+      place-items: center;
+      border: 2px dashed #87949f;
+      border-radius: 24px;
+      background: rgba(17,19,21,.92);
+      backdrop-filter: blur(9px);
+      color: var(--text);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .12s;
+    }
+    .drop-overlay.show { opacity: 1; }
+    .drop-overlay div { display: grid; justify-items: center; gap: 11px; font-size: 15px; font-weight: 600; }
+    .drop-overlay svg { width: 34px; height: 34px; color: #b5bec5; }
+
+    .scroll-bottom {
+      position: fixed;
+      right: max(18px, calc((100vw - 760px) / 2 + 18px));
+      bottom: 158px;
+      z-index: 28;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border-strong);
+      border-radius: 50%;
+      background: rgba(39,42,45,.96);
+      color: #d7dadd;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity .15s, transform .15s;
+    }
+    .scroll-bottom[hidden] { display: grid; opacity: 0; transform: translateY(8px); pointer-events: none; }
+    .scroll-bottom svg { width: 17px; height: 17px; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      top: 78px;
+      z-index: 100;
+      max-width: calc(100vw - 30px);
+      padding: 10px 15px;
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      background: #292d30;
+      color: var(--text);
+      box-shadow: var(--shadow);
+      font-size: 12.5px;
+      text-align: center;
+      opacity: 0;
+      transform: translate(-50%, -8px);
+      pointer-events: none;
+      transition: opacity .18s, transform .18s;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.error { border-color: rgba(223,123,118,.55); color: #f0a09b; }
+
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      padding: 58px 18px 22px;
+      display: grid;
+      place-items: center;
+      background: rgba(5,6,7,.93);
+      backdrop-filter: blur(10px);
+    }
+    .lightbox[hidden] { display: none; }
+    .lightbox img { max-width: 96vw; max-height: calc(100vh - 94px); object-fit: contain; border-radius: 7px; box-shadow: 0 25px 80px rgba(0,0,0,.5); }
+    .lightbox-close, .lightbox-download {
+      position: absolute;
+      top: max(15px, env(safe-area-inset-top));
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 50%;
+      background: rgba(35,38,40,.82);
+      color: white;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .lightbox-close { right: 17px; }
+    .lightbox-download { right: 66px; }
+    .lightbox-close svg, .lightbox-download svg { width: 17px; height: 17px; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+      border: 0;
+    }
+    [hidden] { display: none !important; }
+    :focus-visible { outline: 2px solid #9daab5; outline-offset: 2px; }
+
+    @media (max-width: 560px) {
+      .app-header { height: 64px; }
+      .thread { padding: 83px 12px 180px; }
+      .connection span { display: none; }
+      .message, .message.has-images { max-width: 90%; width: fit-content; }
+      .message.has-images { width: 90%; }
+      .gallery.one .media-tile { min-height: 190px; }
+      .mini-action { opacity: .78; }
+      .composer-region { padding-left: 9px; padding-right: 9px; padding-bottom: max(9px, env(safe-area-inset-bottom)); }
+      .composer { border-radius: 23px; }
+      .scroll-bottom { right: 15px; bottom: 151px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 6.5h14v8.7a3 3 0 0 1-3 3h-4.2L8 21v-2.9a3 3 0 0 1-3-3z"/>
+          <path d="M8.5 10.5h7"/>
+        </svg>
+      </div>
+      <h1 id="authTitle">PrivMsg</h1>
+      <p>Sign in with an approved Google account to open your private thread.</p>
+      <button class="google-button" id="googleSignInButton" type="button" disabled>
+        <svg viewBox="0 0 18 18" aria-hidden="true">
+          <path fill="#4285F4" d="M17.64 9.205c0-.638-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.797 2.716v2.258h2.909c1.702-1.567 2.684-3.875 2.684-6.614z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.468-.806 5.956-2.181l-2.909-2.258c-.806.54-1.835.859-3.047.859-2.344 0-4.328-1.585-5.037-3.714H.956v2.332A9 9 0 0 0 9 18z"/>
+          <path fill="#FBBC05" d="M3.963 10.706A5.41 5.41 0 0 1 3.681 9c0-.592.102-1.168.282-1.706V4.962H.956A9 9 0 0 0 0 9c0 1.452.347 2.827.956 4.038l3.007-2.332z"/>
+          <path fill="#EA4335" d="M9 3.58c1.321 0 2.507.454 3.441 1.346l2.581-2.581C13.464.892 11.426 0 9 0A9 9 0 0 0 .956 4.962l3.007 2.332C4.672 5.165 6.656 3.58 9 3.58z"/>
+        </svg>
+        Continue with Google
+      </button>
+      <div class="auth-status" id="authStatus" role="status">Checking saved sign-in…</div>
+      <div class="auth-foot">Approved accounts only</div>
+    </div>
+  </section>
+
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="identity">
+        <div class="avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 6.5h14v8.7a3 3 0 0 1-3 3h-4.2L8 21v-2.9a3 3 0 0 1-3-3z"/>
+            <path d="M8.5 10.5h7"/>
+          </svg>
+        </div>
+        <div class="identity-copy">
+          <h1>PrivMsg</h1>
+          <p>Message yourself</p>
+        </div>
+      </div>
+      <div class="connection" id="connection" data-state="connecting" title="Connecting to Firebase">
+        <span class="connection-dot" aria-hidden="true"></span>
+        <span id="connectionLabel">Connecting</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="thread" id="thread" aria-live="polite">
+    <section class="empty-state" id="emptyState">
+      <div class="empty-inner">
+        <div class="empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 6.5h14v8.7a3 3 0 0 1-3 3h-4.2L8 21v-2.9a3 3 0 0 1-3-3z"/>
+            <path d="M8.5 10.5h7"/>
+          </svg>
+        </div>
+        <h2>Your private thread</h2>
+        <p>Send yourself text or images. Everything you send will appear here.</p>
+      </div>
+    </section>
+    <div id="messageList"></div>
+  </main>
+
+  <button class="scroll-bottom" id="scrollBottom" aria-label="Scroll to latest message" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+  </button>
+
+  <section class="composer-region" aria-label="New message">
+    <div class="composer-wrap">
+      <div class="attachment-menu" id="attachmentMenu" hidden>
+        <button class="menu-item" id="uploadButton" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+          Upload images
+        </button>
+        <button class="menu-item" id="pasteButton" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1.4"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>
+          Paste from clipboard
+        </button>
+      </div>
+
+      <div class="composer">
+        <div class="staged-tray" id="stagedTray" aria-label="Selected images"></div>
+        <div class="compose-row">
+          <button class="round-button attach-button" id="attachButton" type="button" aria-label="Add an image" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <label class="sr-only" for="messageInput">Message</label>
+          <textarea id="messageInput" rows="1" placeholder="Message yourself" autocomplete="off"></textarea>
+          <button class="round-button send-button" id="sendButton" type="button" aria-label="Send message" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0L6.5 10.5M12 5l5.5 5.5"/></svg>
+          </button>
+        </div>
+        <div class="composer-meta" id="composerMeta"></div>
+      </div>
+      <input id="fileInput" type="file" accept="image/*,.tif,.tiff,.heic,.heif" multiple hidden>
+    </div>
+  </section>
+
+  <div class="drop-overlay" id="dropOverlay" aria-hidden="true">
+    <div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L7 20"/></svg>
+      Drop images to add them
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Image preview" hidden>
+    <a class="lightbox-download" id="lightboxDownload" download aria-label="Download image">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4"/><path d="M5 19h14"/></svg>
+    </a>
+    <button class="lightbox-close" id="lightboxClose" type="button" aria-label="Close image preview">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+    </button>
+    <img id="lightboxImage" alt="">
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+    import {
+      getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
+      signOut, setPersistence, browserLocalPersistence
+    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+    import {
+      getFirestore, collection, doc, setDoc, addDoc, getDoc, deleteDoc,
+      query, where, onSnapshot, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD3dBLNLnDdzURfor0B4v6hXuUb5LSr4zU",
+      authDomain: "privmsg-stream.firebaseapp.com",
+      projectId: "privmsg-stream",
+      storageBucket: "privmsg-stream.firebasestorage.app",
+      messagingSenderId: "988675611975",
+      appId: "1:988675611975:web:a2f0bea735a33182094062",
+      measurementId: "G-EG0SR5ED6N"
+    };
+
+    const COLL = "drops";
+    const CHUNK_SIZE = 700000;
+    const MAX_FILE_BYTES = 15 * 1024 * 1024;
+    const ALLOWED_EMAILS = Object.freeze([
+      "rappsongs@gmail.com",
+      "rappjordan1994@gmail.com",
+      "admin@firstupcjax.com"
+    ]);
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: "select_account" });
+    const $ = selector => document.querySelector(selector);
+
+    const authGate = $("#authGate");
+    const googleSignInButton = $("#googleSignInButton");
+    const authStatus = $("#authStatus");
+    const thread = $("#thread");
+    const messageList = $("#messageList");
+    const emptyState = $("#emptyState");
+    const connection = $("#connection");
+    const connectionLabel = $("#connectionLabel");
+    const messageInput = $("#messageInput");
+    const sendButton = $("#sendButton");
+    const attachButton = $("#attachButton");
+    const attachmentMenu = $("#attachmentMenu");
+    const uploadButton = $("#uploadButton");
+    const pasteButton = $("#pasteButton");
+    const fileInput = $("#fileInput");
+    const stagedTray = $("#stagedTray");
+    const composerMeta = $("#composerMeta");
+    const dropOverlay = $("#dropOverlay");
+    const scrollBottomButton = $("#scrollBottom");
+    const toastElement = $("#toast");
+    const lightbox = $("#lightbox");
+    const lightboxImage = $("#lightboxImage");
+    const lightboxDownload = $("#lightboxDownload");
+    const lightboxClose = $("#lightboxClose");
+
+    let currentUser = null;
+    let staged = [];
+    let messages = [];
+    let unsubscribe = null;
+    let saving = false;
+    let dragDepth = 0;
+    let toastTimer = null;
+    let initialRender = true;
+    let authNotice = "";
+    const imageUrlCache = new Map();
+
+    const iconImage = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L7 20"/></svg>';
+    const iconCopy = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
+    const iconTrash = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2m3 0-.7 12a2 2 0 0 1-2 1.9H8.7a2 2 0 0 1-2-1.9L6 7"/></svg>';
+    const iconX = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+
+    function setConnection(state, label, title = label) {
+      connection.dataset.state = state;
+      connectionLabel.textContent = label;
+      connection.title = title;
+    }
+
+    function normalizedEmail(user) {
+      return String(user?.email || "").trim().toLowerCase();
+    }
+
+    function isAllowedGoogleUser(user) {
+      const usesGoogle = user?.providerData?.some(profile => profile.providerId === "google.com");
+      return Boolean(
+        user && !user.isAnonymous && user.emailVerified && usesGoogle &&
+        ALLOWED_EMAILS.includes(normalizedEmail(user))
+      );
+    }
+
+    function showAuthGate(message = "Sign in to continue.", isError = false) {
+      document.body.classList.remove("authorized");
+      authGate.hidden = false;
+      authStatus.textContent = message;
+      authStatus.classList.toggle("error", isError);
+      googleSignInButton.disabled = false;
+    }
+
+    function lockApp() {
+      currentUser = null;
+      document.body.classList.remove("authorized");
+      authGate.hidden = false;
+      setConnection("connecting", "Locked", "Google sign-in required");
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+      messages = [];
+      messageList.replaceChildren();
+      emptyState.hidden = false;
+      for (const url of imageUrlCache.values()) URL.revokeObjectURL(url);
+      imageUrlCache.clear();
+      updateSendState();
+    }
+
+    function unlockApp(user) {
+      currentUser = user;
+      authGate.hidden = true;
+      document.body.classList.add("authorized");
+      setConnection("online", "Signed in", `Signed in as ${normalizedEmail(user)}`);
+      updateSendState();
+      startMessages();
+    }
+
+    function friendlyAuthError(error) {
+      switch (error?.code) {
+        case "auth/popup-closed-by-user":
+          return "Sign-in was canceled.";
+        case "auth/popup-blocked":
+          return "The browser blocked the sign-in window. Allow popups and try again.";
+        case "auth/unauthorized-domain":
+          return `This website domain is not authorized in Firebase Authentication: ${location.hostname || "local file"}`;
+        case "auth/network-request-failed":
+          return "Could not reach Google. Check the internet connection and try again.";
+        default:
+          return `Sign-in failed: ${error?.code || error?.message || "Unknown error"}`;
+      }
+    }
+
+    async function beginGoogleSignIn() {
+      authNotice = "";
+      googleSignInButton.disabled = true;
+      authStatus.classList.remove("error");
+      authStatus.textContent = "Opening Google sign-in…";
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+        await signInWithPopup(auth, googleProvider);
+      } catch (error) {
+        console.error(error);
+        showAuthGate(friendlyAuthError(error), true);
+      }
+    }
+
+    function toast(message, isError = false) {
+      toastElement.textContent = message;
+      toastElement.classList.toggle("error", isError);
+      toastElement.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastElement.classList.remove("show"), isError ? 4200 : 2400);
+    }
+
+    function toMillis(timestamp) {
+      return timestamp && typeof timestamp.toMillis === "function" ? timestamp.toMillis() : Date.now();
+    }
+
+    function dayKey(timestamp) {
+      const date = new Date(toMillis(timestamp));
+      return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    }
+
+    function dayLabel(timestamp) {
+      const date = new Date(toMillis(timestamp));
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const sameDay = (a, b) => a.toDateString() === b.toDateString();
+      if (sameDay(date, today)) return "Today";
+      if (sameDay(date, yesterday)) return "Yesterday";
+      return date.toLocaleDateString([], { month: "short", day: "numeric", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+    }
+
+    function timeLabel(timestamp) {
+      return new Date(toMillis(timestamp)).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+
+    function extFromMime(type) {
+      const extensions = {
+        "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp",
+        "image/tiff": "tiff", "image/bmp": "bmp", "image/svg+xml": "svg", "image/avif": "avif"
+      };
+      return extensions[type] || "png";
+    }
+
+    function isImage(file) {
+      return Boolean((file.type && file.type.startsWith("image/")) || /\.(png|jpe?g|gif|webp|bmp|tiff?|svg|avif|heic|heif)$/i.test(file.name || ""));
+    }
+
+    function readAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error(`Could not read ${file.name || "that image"}`));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function splitChunks(value) {
+      const chunks = [];
+      for (let i = 0; i < value.length; i += CHUNK_SIZE) chunks.push(value.slice(i, i + CHUNK_SIZE));
+      return chunks;
+    }
+
+    function dataUrlToBlob(dataUrl) {
+      const comma = dataUrl.indexOf(",");
+      const header = dataUrl.slice(0, comma);
+      const binary = atob(dataUrl.slice(comma + 1));
+      const mime = (header.match(/data:(.*?)(;|$)/) || [])[1] || "application/octet-stream";
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    }
+
+    function nearBottom() {
+      return document.documentElement.scrollHeight - window.scrollY - window.innerHeight < 190;
+    }
+
+    function scrollToLatest(behavior = "smooth") {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+    }
+
+    function updateScrollButton() {
+      scrollBottomButton.hidden = nearBottom();
+    }
+
+    function autoSizeInput() {
+      messageInput.style.height = "0";
+      messageInput.style.height = Math.min(messageInput.scrollHeight, 160) + "px";
+    }
+
+    function updateSendState() {
+      sendButton.disabled = saving || !currentUser || (!messageInput.value.trim() && staged.length === 0);
+    }
+
+    function closeAttachmentMenu() {
+      attachmentMenu.hidden = true;
+      attachButton.setAttribute("aria-expanded", "false");
+    }
+
+    async function addFiles(fileList) {
+      const all = [...fileList];
+      const images = all.filter(isImage);
+      const skipped = all.length - images.length;
+      if (skipped) toast(`${skipped} non-image file${skipped === 1 ? " was" : "s were"} skipped`);
+
+      for (const file of images) {
+        if (file.size > MAX_FILE_BYTES) {
+          toast(`${file.name || "That image"} is over 15 MB`, true);
+          continue;
+        }
+        try {
+          const dataUrl = await readAsDataUrl(file);
+          staged.push({
+            name: file.name || `pasted-${Date.now()}.${extFromMime(file.type)}`,
+            type: file.type || "",
+            dataUrl
+          });
+        } catch (error) {
+          toast(error.message, true);
+        }
+      }
+      renderStaged();
+      updateSendState();
+    }
+
+    function renderStaged() {
+      stagedTray.replaceChildren();
+      staged.forEach((item, index) => {
+        const tile = document.createElement("div");
+        tile.className = "staged-item";
+        const image = document.createElement("img");
+        image.src = item.dataUrl;
+        image.alt = item.name;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "remove-staged";
+        remove.setAttribute("aria-label", `Remove ${item.name}`);
+        remove.innerHTML = iconX;
+        remove.addEventListener("click", () => {
+          staged.splice(index, 1);
+          renderStaged();
+          updateSendState();
+        });
+        tile.append(image, remove);
+        stagedTray.append(tile);
+      });
+    }
+
+    function insertTextAtCursor(text) {
+      const start = messageInput.selectionStart;
+      const end = messageInput.selectionEnd;
+      const before = messageInput.value.slice(0, start);
+      const after = messageInput.value.slice(end);
+      messageInput.value = before + text + after;
+      const caret = start + text.length;
+      messageInput.setSelectionRange(caret, caret);
+      messageInput.dispatchEvent(new Event("input"));
+      messageInput.focus();
+    }
+
+    async function pasteFromClipboard() {
+      closeAttachmentMenu();
+      try {
+        const items = await navigator.clipboard.read();
+        const files = [];
+        for (const item of items) {
+          for (const type of item.types) {
+            if (type.startsWith("image/")) {
+              const blob = await item.getType(type);
+              files.push(new File([blob], `pasted-${Date.now()}.${extFromMime(type)}`, { type }));
+            }
+          }
+        }
+        if (files.length) {
+          await addFiles(files);
+          return;
+        }
+        const text = await navigator.clipboard.readText();
+        if (text) insertTextAtCursor(text);
+        else toast("The clipboard is empty");
+      } catch {
+        toast("Press Ctrl+V or Cmd+V to paste", true);
+        messageInput.focus();
+      }
+    }
+
+    async function sendMessage() {
+      const text = messageInput.value.trim();
+      if ((!text && !staged.length) || saving) return;
+      if (!currentUser) {
+        toast("Still connecting. Try again in a moment.");
+        return;
+      }
+
+      const outgoingImages = [...staged];
+      saving = true;
+      composerMeta.textContent = outgoingImages.length ? "Preparing images…" : "Sending…";
+      updateSendState();
+
+      try {
+        const imageMetadata = [];
+        for (let imageIndex = 0; imageIndex < outgoingImages.length; imageIndex++) {
+          composerMeta.textContent = `Sending image ${imageIndex + 1} of ${outgoingImages.length}…`;
+          const image = outgoingImages[imageIndex];
+          const key = crypto.randomUUID();
+          const parts = splitChunks(image.dataUrl);
+          for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+            await setDoc(doc(db, COLL, `chunk_${key}_${partIndex}`), {
+              kind: "chunk",
+              key,
+              index: partIndex,
+              data: parts[partIndex],
+              owner: currentUser.uid
+            });
+          }
+          imageMetadata.push({ name: image.name, type: image.type, key, chunks: parts.length });
+        }
+
+        await addDoc(collection(db, COLL), {
+          kind: "drop",
+          text,
+          images: imageMetadata,
+          owner: currentUser.uid,
+          createdAt: serverTimestamp()
+        });
+
+        messageInput.value = "";
+        staged = [];
+        renderStaged();
+        autoSizeInput();
+        composerMeta.textContent = "";
+        setTimeout(() => scrollToLatest(), 80);
+      } catch (error) {
+        console.error(error);
+        composerMeta.textContent = "";
+        toast(`Message failed: ${error.code || error.message}`, true);
+      } finally {
+        saving = false;
+        updateSendState();
+        messageInput.focus();
+      }
+    }
+
+    async function getImageUrl(meta) {
+      if (imageUrlCache.has(meta.key)) return imageUrlCache.get(meta.key);
+      const snapshots = await Promise.all(
+        Array.from({ length: meta.chunks }, (_, index) => getDoc(doc(db, COLL, `chunk_${meta.key}_${index}`)))
+      );
+      if (snapshots.some(snapshot => !snapshot.exists())) throw new Error("Image data is incomplete");
+      const dataUrl = snapshots.map(snapshot => snapshot.data().data).join("");
+      const url = URL.createObjectURL(dataUrlToBlob(dataUrl));
+      imageUrlCache.set(meta.key, url);
+      return url;
+    }
+
+    function openLightbox(url, name) {
+      lightboxImage.src = url;
+      lightboxImage.alt = name || "Message image";
+      lightboxDownload.href = url;
+      lightboxDownload.download = name || "image";
+      lightbox.hidden = false;
+      document.body.style.overflow = "hidden";
+      lightboxClose.focus();
+    }
+
+    function closeLightbox() {
+      lightbox.hidden = true;
+      lightboxImage.removeAttribute("src");
+      lightboxDownload.removeAttribute("href");
+      document.body.style.overflow = "";
+    }
+
+    async function hydrateMedia(tile, meta) {
+      try {
+        const url = await getImageUrl(meta);
+        const image = document.createElement("img");
+        image.alt = meta.name || "Attached image";
+        image.loading = "lazy";
+        image.src = url;
+        image.addEventListener("load", () => tile.classList.add("loaded"), { once: true });
+        image.addEventListener("error", () => tile.classList.add("failed"), { once: true });
+        tile.prepend(image);
+        tile.addEventListener("click", () => openLightbox(url, meta.name));
+      } catch (error) {
+        console.error(error);
+        tile.classList.add("failed");
+        const placeholder = tile.querySelector(".media-placeholder");
+        if (placeholder) placeholder.setAttribute("title", "Image unavailable");
+      }
+    }
+
+    function actionButton(label, icon, className = "") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `mini-action ${className}`.trim();
+      button.setAttribute("aria-label", label);
+      button.title = label;
+      button.innerHTML = icon;
+      return button;
+    }
+
+    async function deleteMessage(message, button) {
+      if (!confirm("Delete this message permanently?")) return;
+      button.disabled = true;
+      try {
+        const operations = [deleteDoc(doc(db, COLL, message.id))];
+        for (const image of message.images || []) {
+          for (let index = 0; index < image.chunks; index++) {
+            operations.push(deleteDoc(doc(db, COLL, `chunk_${image.key}_${index}`)));
+          }
+        }
+        await Promise.all(operations);
+        for (const image of message.images || []) {
+          const url = imageUrlCache.get(image.key);
+          if (url) URL.revokeObjectURL(url);
+          imageUrlCache.delete(image.key);
+        }
+        toast("Message deleted");
+      } catch (error) {
+        console.error(error);
+        toast(`Delete failed: ${error.code || error.message}`, true);
+        button.disabled = false;
+      }
+    }
+
+    function createMessage(message) {
+      const row = document.createElement("div");
+      row.className = "message-row";
+      const bubble = document.createElement("article");
+      const hasImages = Boolean(message.images && message.images.length);
+      bubble.className = `message${hasImages ? " has-images" : ""}`;
+
+      if (hasImages) {
+        const gallery = document.createElement("div");
+        gallery.className = `gallery ${message.images.length === 1 ? "one" : message.images.length === 2 ? "two" : "many"}`;
+        message.images.forEach(meta => {
+          const tile = document.createElement("button");
+          tile.type = "button";
+          tile.className = "media-tile";
+          tile.setAttribute("aria-label", `Open ${meta.name || "image"}`);
+          const placeholder = document.createElement("span");
+          placeholder.className = "media-placeholder";
+          placeholder.innerHTML = iconImage;
+          tile.append(placeholder);
+          gallery.append(tile);
+          hydrateMedia(tile, meta);
+        });
+        bubble.append(gallery);
+      }
+
+      if (message.text) {
+        const text = document.createElement("p");
+        text.className = "message-text";
+        text.textContent = message.text;
+        bubble.append(text);
+      }
+
+      const foot = document.createElement("footer");
+      foot.className = "message-foot";
+      const time = document.createElement("time");
+      time.className = "message-time";
+      time.textContent = message.createdAt ? timeLabel(message.createdAt) : "Sending…";
+      foot.append(time);
+
+      if (message.text) {
+        const copy = actionButton("Copy text", iconCopy);
+        copy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(message.text);
+            toast("Text copied");
+          } catch {
+            toast("Could not copy the text", true);
+          }
+        });
+        foot.append(copy);
+      }
+
+      const remove = actionButton("Delete message", iconTrash, "danger");
+      remove.addEventListener("click", () => deleteMessage(message, remove));
+      foot.append(remove);
+      bubble.append(foot);
+      row.append(bubble);
+      return row;
+    }
+
+    function renderMessages() {
+      const shouldStick = initialRender || nearBottom();
+      messageList.replaceChildren();
+      emptyState.hidden = messages.length > 0;
+      let previousDay = "";
+
+      for (const message of messages) {
+        const key = dayKey(message.createdAt);
+        if (key !== previousDay) {
+          const divider = document.createElement("div");
+          divider.className = "day-divider";
+          divider.textContent = dayLabel(message.createdAt);
+          messageList.append(divider);
+          previousDay = key;
+        }
+        messageList.append(createMessage(message));
+      }
+
+      requestAnimationFrame(() => {
+        if (shouldStick) scrollToLatest(initialRender ? "auto" : "smooth");
+        initialRender = false;
+        updateScrollButton();
+      });
+    }
+
+    function startMessages() {
+      if (unsubscribe) return;
+      const dropsQuery = query(collection(db, COLL), where("kind", "==", "drop"));
+      unsubscribe = onSnapshot(dropsQuery, snapshot => {
+        messages = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+        messages.sort((a, b) => toMillis(a.createdAt) - toMillis(b.createdAt));
+        renderMessages();
+      }, error => {
+        console.error(error);
+        setConnection("error", "Error", "Could not load messages");
+        toast(`Could not load messages: ${error.code || error.message}`, true);
+      });
+    }
+
+    const persistenceReady = setPersistence(auth, browserLocalPersistence).catch(error => {
+      console.error(error);
+      authNotice = "Browser storage is unavailable, so sign-in may not remain saved.";
+    });
+
+    onAuthStateChanged(auth, async user => {
+      await persistenceReady;
+
+      if (isAllowedGoogleUser(user)) {
+        authNotice = "";
+        unlockApp(user);
+        return;
+      }
+
+      lockApp();
+      if (user) {
+        const email = normalizedEmail(user) || "That account";
+        authNotice = `${email} is not authorized. Choose an approved Google account.`;
+        try {
+          await signOut(auth);
+        } catch (error) {
+          console.error(error);
+        }
+        showAuthGate(authNotice, true);
+        return;
+      }
+
+      showAuthGate(authNotice || "Sign in with an approved Google account to continue.", Boolean(authNotice));
+    });
+
+    googleSignInButton.addEventListener("click", beginGoogleSignIn);
+
+    attachButton.addEventListener("click", event => {
+      event.stopPropagation();
+      const willOpen = attachmentMenu.hidden;
+      attachmentMenu.hidden = !willOpen;
+      attachButton.setAttribute("aria-expanded", String(willOpen));
+    });
+
+    uploadButton.addEventListener("click", () => {
+      closeAttachmentMenu();
+      fileInput.click();
+    });
+    pasteButton.addEventListener("click", pasteFromClipboard);
+    fileInput.addEventListener("change", () => {
+      addFiles(fileInput.files);
+      fileInput.value = "";
+    });
+
+    document.addEventListener("click", event => {
+      if (!attachmentMenu.contains(event.target) && event.target !== attachButton) closeAttachmentMenu();
+    });
+
+    document.addEventListener("paste", event => {
+      const imageItems = [...(event.clipboardData?.items || [])].filter(item => item.type.startsWith("image/"));
+      if (!imageItems.length) return;
+      event.preventDefault();
+      const files = imageItems.map(item => item.getAsFile()).filter(Boolean);
+      if (files.length) addFiles(files);
+    });
+
+    window.addEventListener("dragenter", event => {
+      if (![...(event.dataTransfer?.types || [])].includes("Files")) return;
+      event.preventDefault();
+      dragDepth++;
+      dropOverlay.classList.add("show");
+    });
+    window.addEventListener("dragover", event => {
+      if ([...(event.dataTransfer?.types || [])].includes("Files")) event.preventDefault();
+    });
+    window.addEventListener("dragleave", event => {
+      event.preventDefault();
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (!dragDepth) dropOverlay.classList.remove("show");
+    });
+    window.addEventListener("drop", event => {
+      event.preventDefault();
+      dragDepth = 0;
+      dropOverlay.classList.remove("show");
+      if (event.dataTransfer?.files?.length) addFiles(event.dataTransfer.files);
+    });
+
+    messageInput.addEventListener("input", () => {
+      autoSizeInput();
+      updateSendState();
+    });
+    messageInput.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+    sendButton.addEventListener("click", sendMessage);
+    scrollBottomButton.addEventListener("click", () => scrollToLatest());
+    window.addEventListener("scroll", updateScrollButton, { passive: true });
+
+    lightboxClose.addEventListener("click", closeLightbox);
+    lightbox.addEventListener("click", event => {
+      if (event.target === lightbox) closeLightbox();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        if (!lightbox.hidden) closeLightbox();
+        else closeAttachmentMenu();
+      }
+    });
+
+    window.addEventListener("beforeunload", () => {
+      for (const url of imageUrlCache.values()) URL.revokeObjectURL(url);
+    });
+
+    autoSizeInput();
+    updateSendState();
+  </script>
+</body>
+</html>
