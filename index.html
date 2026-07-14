@@ -805,6 +805,11 @@
     const AUTH_USERNAME = "rapp";
     const AUTH_DOMAIN = "@local.mail";
     const AUTH_EMAIL = AUTH_USERNAME + AUTH_DOMAIN;
+
+    // Optional local-only shortcut: paste an OpenAI key between these quotation marks.
+    // Anyone who can load this HTML can inspect the value.
+    const OPENAI_API_KEY = "";
+
     const OPENAI_KEY_STORAGE = "privmsg.openaiApiKey.session";
     const TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
     const MAX_AUDIO_BYTES = 24 * 1024 * 1024;
@@ -1161,6 +1166,9 @@
     }
 
     function requestOpenAIKey() {
+      const hardcoded = String(OPENAI_API_KEY || "").trim();
+      if (hardcoded) return hardcoded;
+
       const saved = storedOpenAIKey();
       if (saved) return saved;
 
