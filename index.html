@@ -788,6 +788,9 @@
       getFirestore, collection, doc, setDoc, addDoc, getDoc, deleteDoc,
       query, where, onSnapshot, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+    import {
+      getFunctions, httpsCallable
+    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyD3dBLNLnDdzURfor0B4v6hXuUb5LSr4zU",
@@ -805,19 +808,18 @@
     const AUTH_USERNAME = "rapp";
     const AUTH_DOMAIN = "@local.mail";
     const AUTH_EMAIL = AUTH_USERNAME + AUTH_DOMAIN;
-
-    // Optional local-only shortcut: paste an OpenAI key between these quotation marks.
-    // Anyone who can load this HTML can inspect the value.
-    const OPENAI_API_KEY = "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";
-
-    const OPENAI_KEY_STORAGE = "privmsg.openaiApiKey.session";
-    const TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
-    const MAX_AUDIO_BYTES = 24 * 1024 * 1024;
+    const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
     const AUDIO_BITRATE = 64000;
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    const functions = getFunctions(app, "us-central1");
+    const transcribeAudioCallable = httpsCallable(
+      functions,
+      "transcribeAudio",
+      { timeout: 540000 }
+    );
     const $ = selector => document.querySelector(selector);
 
     const authGate = $("#authGate");
@@ -867,7 +869,6 @@
     let recordingBytes = 0;
     let recordingStartedAt = 0;
     let recordingTimer = null;
-    let recordingApiKey = "";
     let recordingFailed = false;
     let progressTimer = null;
     let progressStartedAt = 0;
@@ -1151,39 +1152,17 @@
       messageInput.dispatchEvent(new Event("input"));
     }
 
-    function storedOpenAIKey() {
-      try {
-        return sessionStorage.getItem(OPENAI_KEY_STORAGE) || "";
-      } catch {
-        return "";
-      }
-    }
-
-    function forgetOpenAIKey() {
-      try {
-        sessionStorage.removeItem(OPENAI_KEY_STORAGE);
-      } catch {}
-    }
-
-    function requestOpenAIKey() {
-      const hardcoded = String(OPENAI_API_KEY || "").trim();
-      if (hardcoded) return hardcoded;
-
-      const saved = storedOpenAIKey();
-      if (saved) return saved;
-
-      const entered = window.prompt("Paste an OpenAI API key. It stays in this browser tab and is never saved to GitHub.");
-      const key = String(entered || "").trim();
-      if (!key) return "";
-      if (!/^sk-[A-Za-z0-9_-]{20,}$/.test(key)) {
-        toast("That does not look like an OpenAI API key.", true);
-        return "";
-      }
-
-      try {
-        sessionStorage.setItem(OPENAI_KEY_STORAGE, key);
-      } catch {}
-      return key;
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const value = String(reader.result || "");
+          const comma = value.indexOf(",");
+          resolve(comma >= 0 ? value.slice(comma + 1) : value);
+        };
+        reader.onerror = () => reject(new Error("Could not prepare the recording for transcription."));
+        reader.readAsDataURL(blob);
+      });
     }
 
     function preferredAudioType() {
@@ -1194,14 +1173,6 @@
         { mime: "audio/webm", extension: "webm" }
       ];
       return candidates.find(item => MediaRecorder.isTypeSupported(item.mime)) || { mime: "", extension: "webm" };
-    }
-
-    function extensionForAudio(mime) {
-      const type = String(mime || "").toLowerCase();
-      if (type.includes("mp4") || type.includes("m4a") || type.includes("aac")) return "m4a";
-      if (type.includes("mpeg") || type.includes("mp3")) return "mp3";
-      if (type.includes("wav")) return "wav";
-      return "webm";
     }
 
     function stopMediaTracks() {
@@ -1306,9 +1277,6 @@
       }
       if (!currentUser || audioState !== "idle") return;
 
-      const apiKey = requestOpenAIKey();
-      if (!apiKey) return;
-
       try {
         mediaStream = await openMicrophone();
         const preferred = preferredAudioType();
@@ -1324,7 +1292,6 @@
         audioChunks = [];
         recordingBytes = 0;
         recordingFailed = false;
-        recordingApiKey = apiKey;
 
         mediaRecorder.addEventListener("dataavailable", event => {
           if (!event.data?.size) return;
@@ -1352,7 +1319,6 @@
         console.error(error);
         stopMediaTracks();
         stopRecordingTimer();
-        recordingApiKey = "";
         setAudioState("idle");
         toast(friendlyMicrophoneError(error), true);
       }
@@ -1370,10 +1336,8 @@
 
       const recorder = mediaRecorder;
       const chunks = audioChunks;
-      const apiKey = recordingApiKey;
       mediaRecorder = null;
       audioChunks = [];
-      recordingApiKey = "";
 
       if (recordingFailed || !chunks.length) {
         setAudioState("idle");
@@ -1388,53 +1352,48 @@
         toast("No audio was captured.", true);
         return;
       }
-      if (audio.size > 25 * 1024 * 1024) {
+      if (audio.size > MAX_AUDIO_BYTES) {
         setAudioState("idle");
         toast("The recording is too large for transcription.", true);
         return;
       }
 
-      await transcribeAudio(audio, apiKey);
+      await transcribeAudio(audio);
     }
 
-    async function transcribeAudio(audio, apiKey) {
+    function friendlyTranscriptionError(error) {
+      switch (error?.code) {
+        case "functions/unauthenticated":
+          return "Your sign-in expired. Reload the page and sign in again.";
+        case "functions/permission-denied":
+          return "This Firebase account is not authorized to transcribe audio.";
+        case "functions/resource-exhausted":
+          return "The recording is too large, or the OpenAI quota has been reached.";
+        case "functions/failed-precondition":
+          return "The OpenAI API key was rejected.";
+        case "functions/deadline-exceeded":
+          return "Transcription took too long. Try a shorter recording.";
+        case "functions/unavailable":
+          return "The transcription service is temporarily unavailable.";
+        default:
+          return error?.message || "Unknown error";
+      }
+    }
+
+    async function transcribeAudio(audio) {
       setAudioState("transcribing");
       try {
-        const extension = extensionForAudio(audio.type);
-        const file = new File([audio], "recording-" + Date.now() + "." + extension, { type: audio.type });
-        const form = new FormData();
-        form.append("file", file);
-        form.append("model", TRANSCRIPTION_MODEL);
-        form.append("language", "en");
-        form.append("response_format", "json");
-
-        const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-          method: "POST",
-          headers: { Authorization: "Bearer " + apiKey },
-          body: form,
-          referrerPolicy: "no-referrer"
+        const audioBase64 = await blobToBase64(audio);
+        const response = await transcribeAudioCallable({
+          audioBase64,
+          mimeType: audio.type || "audio/webm"
         });
-
-        const raw = await response.text();
-        let result = {};
-        try {
-          result = raw ? JSON.parse(raw) : {};
-        } catch {
-          result = {};
-        }
-
-        if (!response.ok) {
-          if (response.status === 401) forgetOpenAIKey();
-          const message = result?.error?.message || ("OpenAI returned HTTP " + response.status + ".");
-          throw new Error(message);
-        }
-
-        const transcript = String(result?.text || "").trim();
-        if (!transcript) throw new Error("OpenAI returned an empty transcript.");
+        const transcript = String(response?.data?.text || "").trim();
+        if (!transcript) throw new Error("The transcription service returned an empty transcript.");
         appendTranscript(transcript);
       } catch (error) {
         console.error(error);
-        toast("Transcription failed: " + (error?.message || "Unknown error"), true);
+        toast("Transcription failed: " + friendlyTranscriptionError(error), true);
       } finally {
         finishTranscriptionProgress();
         setAudioState("idle");
