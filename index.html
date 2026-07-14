@@ -96,9 +96,36 @@
     .auth-mark svg { width: 26px; height: 26px; }
     .auth-card h1 { margin: 0; font-size: 21px; font-weight: 680; letter-spacing: -.03em; }
     .auth-card > p { margin: 9px auto 23px; color: var(--muted); font-size: 13px; line-height: 1.55; }
-    .google-button {
+    .auth-form { display: grid; gap: 12px; }
+    .auth-field { display: grid; gap: 7px; text-align: left; }
+    .auth-field label {
+      color: #b9bec3;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .045em;
+      text-transform: uppercase;
+    }
+    .auth-field input {
+      width: 100%;
+      min-height: 46px;
+      padding: 11px 13px;
+      border: 1px solid #41464b;
+      border-radius: 12px;
+      outline: 0;
+      background: #17191b;
+      color: var(--text);
+      font-size: 15px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .auth-field input::placeholder { color: #686e73; }
+    .auth-field input:focus {
+      border-color: #697178;
+      box-shadow: 0 0 0 3px rgba(153,166,177,.08);
+    }
+    .login-button {
       width: 100%;
       min-height: 48px;
+      margin-top: 3px;
       padding: 11px 16px;
       display: flex;
       align-items: center;
@@ -113,10 +140,9 @@
       cursor: pointer;
       transition: background .15s, transform .08s, opacity .15s;
     }
-    .google-button:hover:not(:disabled) { background: #fff; }
-    .google-button:active:not(:disabled) { transform: scale(.985); }
-    .google-button:disabled { opacity: .52; cursor: default; }
-    .google-button svg { width: 18px; height: 18px; flex: 0 0 auto; }
+    .login-button:hover:not(:disabled) { background: #fff; }
+    .login-button:active:not(:disabled) { transform: scale(.985); }
+    .login-button:disabled { opacity: .52; cursor: default; }
     .auth-status {
       min-height: 19px;
       margin: 14px 2px 0;
@@ -591,18 +617,20 @@
         </svg>
       </div>
       <h1 id="authTitle">PrivMsg</h1>
-      <p>Sign in with an approved Google account to open your private thread.</p>
-      <button class="google-button" id="googleSignInButton" type="button" disabled>
-        <svg viewBox="0 0 18 18" aria-hidden="true">
-          <path fill="#4285F4" d="M17.64 9.205c0-.638-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.797 2.716v2.258h2.909c1.702-1.567 2.684-3.875 2.684-6.614z"/>
-          <path fill="#34A853" d="M9 18c2.43 0 4.468-.806 5.956-2.181l-2.909-2.258c-.806.54-1.835.859-3.047.859-2.344 0-4.328-1.585-5.037-3.714H.956v2.332A9 9 0 0 0 9 18z"/>
-          <path fill="#FBBC05" d="M3.963 10.706A5.41 5.41 0 0 1 3.681 9c0-.592.102-1.168.282-1.706V4.962H.956A9 9 0 0 0 0 9c0 1.452.347 2.827.956 4.038l3.007-2.332z"/>
-          <path fill="#EA4335" d="M9 3.58c1.321 0 2.507.454 3.441 1.346l2.581-2.581C13.464.892 11.426 0 9 0A9 9 0 0 0 .956 4.962l3.007 2.332C4.672 5.165 6.656 3.58 9 3.58z"/>
-        </svg>
-        Continue with Google
-      </button>
+      <p>Enter your PrivMsg username and password to open your private thread.</p>
+      <form class="auth-form" id="loginForm">
+        <div class="auth-field">
+          <label for="usernameInput">Username</label>
+          <input id="usernameInput" name="username" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        </div>
+        <div class="auth-field">
+          <label for="passwordInput">Password</label>
+          <input id="passwordInput" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+        </div>
+        <button class="login-button" id="loginButton" type="submit" disabled>Sign in</button>
+      </form>
       <div class="auth-status" id="authStatus" role="status">Checking saved sign-in…</div>
-      <div class="auth-foot">Approved accounts only</div>
+      <div class="auth-foot">Authorized access only</div>
     </div>
   </section>
 
@@ -700,7 +728,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
     import {
-      getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
+      getAuth, onAuthStateChanged, signInWithEmailAndPassword,
       signOut, setPersistence, browserLocalPersistence
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
     import {
@@ -721,21 +749,20 @@
     const COLL = "drops";
     const CHUNK_SIZE = 700000;
     const MAX_FILE_BYTES = 15 * 1024 * 1024;
-    const ALLOWED_EMAILS = Object.freeze([
-      "rappsongs@gmail.com",
-      "rappjordan1994@gmail.com",
-      "admin@firstupcjax.com"
-    ]);
+    const AUTH_USERNAME = "rapp";
+    const AUTH_DOMAIN = "@local.mail";
+    const AUTH_EMAIL = AUTH_USERNAME + AUTH_DOMAIN;
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const googleProvider = new GoogleAuthProvider();
-    googleProvider.setCustomParameters({ prompt: "select_account" });
     const $ = selector => document.querySelector(selector);
 
     const authGate = $("#authGate");
-    const googleSignInButton = $("#googleSignInButton");
+    const loginForm = $("#loginForm");
+    const usernameInput = $("#usernameInput");
+    const passwordInput = $("#passwordInput");
+    const loginButton = $("#loginButton");
     const authStatus = $("#authStatus");
     const thread = $("#thread");
     const messageList = $("#messageList");
@@ -785,11 +812,10 @@
       return String(user?.email || "").trim().toLowerCase();
     }
 
-    function isAllowedGoogleUser(user) {
-      const usesGoogle = user?.providerData?.some(profile => profile.providerId === "google.com");
+    function isAllowedPasswordUser(user) {
+      const usesPassword = user?.providerData?.some(profile => profile.providerId === "password");
       return Boolean(
-        user && !user.isAnonymous && user.emailVerified && usesGoogle &&
-        ALLOWED_EMAILS.includes(normalizedEmail(user))
+        user && !user.isAnonymous && usesPassword && normalizedEmail(user) === AUTH_EMAIL
       );
     }
 
@@ -798,14 +824,18 @@
       authGate.hidden = false;
       authStatus.textContent = message;
       authStatus.classList.toggle("error", isError);
-      googleSignInButton.disabled = false;
+      loginButton.disabled = false;
+      requestAnimationFrame(() => {
+        if (!usernameInput.value) usernameInput.focus();
+        else passwordInput.focus();
+      });
     }
 
     function lockApp() {
       currentUser = null;
       document.body.classList.remove("authorized");
       authGate.hidden = false;
-      setConnection("connecting", "Locked", "Google sign-in required");
+      setConnection("connecting", "Locked", "Username and password required");
       if (unsubscribe) {
         unsubscribe();
         unsubscribe = null;
@@ -829,29 +859,48 @@
 
     function friendlyAuthError(error) {
       switch (error?.code) {
-        case "auth/popup-closed-by-user":
-          return "Sign-in was canceled.";
-        case "auth/popup-blocked":
-          return "The browser blocked the sign-in window. Allow popups and try again.";
-        case "auth/unauthorized-domain":
-          return `This website domain is not authorized in Firebase Authentication: ${location.hostname || "local file"}`;
+        case "auth/invalid-credential":
+        case "auth/wrong-password":
+        case "auth/user-not-found":
+          return "Incorrect username or password.";
+        case "auth/user-disabled":
+          return "This account has been disabled in Firebase.";
+        case "auth/operation-not-allowed":
+          return "Email/password sign-in has not been enabled in Firebase Authentication.";
+        case "auth/too-many-requests":
+          return "Too many attempts. Wait a few minutes and try again.";
         case "auth/network-request-failed":
-          return "Could not reach Google. Check the internet connection and try again.";
+          return "Could not reach Firebase. Check the internet connection and try again.";
         default:
           return `Sign-in failed: ${error?.code || error?.message || "Unknown error"}`;
       }
     }
 
-    async function beginGoogleSignIn() {
+    async function beginPasswordSignIn(event) {
+      event.preventDefault();
       authNotice = "";
-      googleSignInButton.disabled = true;
+      const enteredUsername = usernameInput.value.trim().toLowerCase();
+      const normalizedUsername = enteredUsername.endsWith(AUTH_DOMAIN)
+        ? enteredUsername.slice(0, -AUTH_DOMAIN.length)
+        : enteredUsername;
+      const password = passwordInput.value;
+
+      if (normalizedUsername !== AUTH_USERNAME || !password) {
+        passwordInput.value = "";
+        showAuthGate("Incorrect username or password.", true);
+        return;
+      }
+
+      loginButton.disabled = true;
       authStatus.classList.remove("error");
-      authStatus.textContent = "Opening Google sign-in…";
+      authStatus.textContent = "Signing in…";
       try {
         await setPersistence(auth, browserLocalPersistence);
-        await signInWithPopup(auth, googleProvider);
+        await signInWithEmailAndPassword(auth, AUTH_EMAIL, password);
+        passwordInput.value = "";
       } catch (error) {
         console.error(error);
+        passwordInput.value = "";
         showAuthGate(friendlyAuthError(error), true);
       }
     }
@@ -1284,7 +1333,7 @@
     onAuthStateChanged(auth, async user => {
       await persistenceReady;
 
-      if (isAllowedGoogleUser(user)) {
+      if (isAllowedPasswordUser(user)) {
         authNotice = "";
         unlockApp(user);
         return;
@@ -1292,8 +1341,7 @@
 
       lockApp();
       if (user) {
-        const email = normalizedEmail(user) || "That account";
-        authNotice = `${email} is not authorized. Choose an approved Google account.`;
+        authNotice = "That Firebase account is not authorized. Sign in with the PrivMsg credentials.";
         try {
           await signOut(auth);
         } catch (error) {
@@ -1303,10 +1351,10 @@
         return;
       }
 
-      showAuthGate(authNotice || "Sign in with an approved Google account to continue.", Boolean(authNotice));
+      showAuthGate(authNotice || "Enter your username and password to continue.", Boolean(authNotice));
     });
 
-    googleSignInButton.addEventListener("click", beginGoogleSignIn);
+    loginForm.addEventListener("submit", beginPasswordSignIn);
 
     attachButton.addEventListener("click", event => {
       event.stopPropagation();
