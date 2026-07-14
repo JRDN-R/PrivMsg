@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#111315">
   <title>PrivMsg</title>
@@ -30,7 +30,12 @@
     }
 
     * { box-sizing: border-box; }
-    html { height: 100%; background: var(--bg); }
+    html {
+      height: 100%;
+      background: var(--bg);
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
     body {
       min-height: 100%;
       margin: 0;
@@ -40,10 +45,11 @@
         var(--bg);
       color: var(--text);
       font-family: var(--font);
+      touch-action: pan-x pan-y;
       -webkit-font-smoothing: antialiased;
     }
 
-    button, textarea { font: inherit; }
+    button, textarea, input { font: inherit; }
     button { color: inherit; }
     button, [role="button"] { -webkit-tap-highlight-color: transparent; }
     ::selection { background: rgba(169, 183, 195, .28); }
@@ -114,7 +120,7 @@
       outline: 0;
       background: #17191b;
       color: var(--text);
-      font-size: 15px;
+      font-size: 16px;
       transition: border-color .15s, box-shadow .15s;
     }
     .auth-field input::placeholder { color: #686e73; }
@@ -467,7 +473,7 @@
       outline: 0;
       background: transparent;
       color: var(--text);
-      font-size: 15px;
+      font-size: 16px;
       line-height: 1.5;
     }
     #messageInput::placeholder { color: #7c8287; }
