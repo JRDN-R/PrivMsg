@@ -182,22 +182,20 @@
       gap: 16px;
     }
 
-    .identity { min-width: 0; display: flex; align-items: center; gap: 11px; }
-    .avatar {
-      width: 38px;
-      height: 38px;
-      flex: 0 0 auto;
-      display: grid;
-      place-items: center;
-      border: 1px solid #3b4045;
-      border-radius: 50%;
-      background: linear-gradient(145deg, #30353a, #202326);
-      box-shadow: inset 0 1px rgba(255,255,255,.07);
+    .identity {
+      min-width: 0;
+      flex: 0 1 auto;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
     }
-    .avatar svg { width: 19px; height: 19px; }
-    .identity-copy { min-width: 0; }
-    .identity h1 { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.2; letter-spacing: -.01em; }
-    .identity p { margin: 4px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1; }
+    .identity-logo {
+      display: block;
+      width: min(168px, 52vw);
+      height: auto;
+      object-fit: contain;
+      object-position: left center;
+    }
 
     .connection {
       display: flex;
@@ -684,16 +682,15 @@
   <header class="app-header">
     <div class="header-inner">
       <div class="identity">
-        <div class="avatar" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 6.5h14v8.7a3 3 0 0 1-3 3h-4.2L8 21v-2.9a3 3 0 0 1-3-3z"/>
-            <path d="M8.5 10.5h7"/>
-          </svg>
-        </div>
-        <div class="identity-copy">
-          <h1>PrivMsg</h1>
-          <p>Message yourself</p>
-        </div>
+        <img
+          class="identity-logo"
+          src="IMG_0630.webp"
+          alt="Vagaries"
+          width="2172"
+          height="724"
+          decoding="async"
+          fetchpriority="high"
+        >
       </div>
       <div class="connection" id="connection" data-state="connecting" title="Connecting to Firebase">
         <span class="connection-dot" aria-hidden="true"></span>
