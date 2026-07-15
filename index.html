@@ -320,6 +320,28 @@
     .media-placeholder svg { width: 24px; height: 24px; }
     .media-tile.loaded .media-placeholder { display: none; }
     .media-tile.failed .media-placeholder { animation: none; background: #1c1f21; }
+    .media-tile.download-only { cursor: pointer; }
+    .media-badge {
+      position: absolute;
+      right: 9px;
+      bottom: 9px;
+      z-index: 2;
+      max-width: calc(100% - 18px);
+      padding: 5px 8px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 999px;
+      background: rgba(13,15,16,.78);
+      color: #f2f4f5;
+      box-shadow: 0 4px 15px rgba(0,0,0,.28);
+      backdrop-filter: blur(8px);
+      font-size: 10px;
+      font-weight: 650;
+      line-height: 1.2;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      pointer-events: none;
+    }
     @keyframes shimmer { to { background-position: -220% 0; } }
 
     .message-foot {
@@ -420,6 +442,22 @@
       background: var(--surface-2);
     }
     .staged-item img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .staged-size {
+      position: absolute;
+      left: 5px;
+      bottom: 5px;
+      max-width: calc(100% - 10px);
+      padding: 3px 5px;
+      overflow: hidden;
+      border-radius: 6px;
+      background: rgba(13,15,16,.76);
+      color: #f1f3f4;
+      font-size: 8.5px;
+      line-height: 1;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      pointer-events: none;
+    }
     .remove-staged {
       position: absolute;
       top: 5px;
@@ -436,6 +474,7 @@
       cursor: pointer;
     }
     .remove-staged svg { width: 11px; height: 11px; }
+    .remove-staged:disabled { opacity: .58; cursor: default; }
 
     .compose-row { display: flex; align-items: flex-end; gap: 8px; padding: 10px 10px 10px 11px; }
     .round-button {
@@ -453,6 +492,7 @@
     .round-button:active { transform: scale(.94); }
     .attach-button { background: transparent; color: #c3c8cc; }
     .attach-button:hover, .attach-button[aria-expanded="true"] { background: rgba(255,255,255,.07); color: white; }
+    .attach-button:disabled { color: #676d72; cursor: default; }
     .attach-button svg { width: 23px; height: 23px; transition: transform .16s; }
     .attach-button[aria-expanded="true"] svg { transform: rotate(45deg); }
     .send-button { background: var(--accent); color: var(--accent-ink); }
@@ -601,6 +641,23 @@
     }
     .lightbox[hidden] { display: none; }
     .lightbox img { max-width: 96vw; max-height: calc(100vh - 94px); object-fit: contain; border-radius: 7px; box-shadow: 0 25px 80px rgba(0,0,0,.5); }
+    .lightbox::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      width: 22px;
+      height: 22px;
+      margin-left: -11px;
+      border: 2px solid rgba(255,255,255,.2);
+      border-top-color: white;
+      border-radius: 50%;
+      opacity: 0;
+      animation: lightbox-spin .8s linear infinite;
+      pointer-events: none;
+    }
+    .lightbox.is-loading::after { opacity: 1; }
+    @keyframes lightbox-spin { to { transform: rotate(360deg); } }
     .lightbox-close, .lightbox-download {
       position: absolute;
       top: max(15px, env(safe-area-inset-top));
@@ -800,8 +857,13 @@
     };
 
     const COLL = "drops";
-    const CHUNK_SIZE = 700000;
-    const MAX_FILE_BYTES = 15 * 1024 * 1024;
+    const PREVIEW_THRESHOLD_BYTES = 15 * 1024 * 1024;
+    const DOWNLOAD_ONLY_BYTES = 200 * 1024 * 1024;
+    const BINARY_CHUNK_BYTES = 512 * 1024;
+    const CHUNK_UPLOAD_CONCURRENCY = 4;
+    const CHUNK_FETCH_CONCURRENCY = 10;
+    const CHUNK_ENCODING = "base64-chunk-v1";
+    const PREVIEW_MAX_DIMENSION = 1600;
     const AUTH_USERNAME = "rapp";
     const AUTH_DOMAIN = "@local.mail";
     const AUTH_EMAIL = AUTH_USERNAME + AUTH_DOMAIN;
@@ -869,8 +931,12 @@
     let recordingFailed = false;
     let progressTimer = null;
     let progressStartedAt = 0;
+    let preparingFiles = 0;
+    let activeLightboxKey = null;
+    let temporaryDownloadUrl = "";
     const audioCaptureSupported = Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
     const imageUrlCache = new Map();
+    const imageUrlPending = new Map();
 
     const iconImage = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L7 20"/></svg>';
     const iconCopy = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
@@ -920,8 +986,13 @@
       messages = [];
       messageList.replaceChildren();
       emptyState.hidden = false;
+      if (!lightbox.hidden) closeLightbox();
+      releaseStaged();
+      staged = [];
+      renderStaged();
       for (const url of imageUrlCache.values()) URL.revokeObjectURL(url);
       imageUrlCache.clear();
+      imageUrlPending.clear();
       updateSendState();
     }
 
@@ -1026,19 +1097,132 @@
       return Boolean((file.type && file.type.startsWith("image/")) || /\.(png|jpe?g|gif|webp|bmp|tiff?|svg|avif|heic|heif)$/i.test(file.name || ""));
     }
 
-    function readAsDataUrl(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error(`Could not read ${file.name || "that image"}`));
-        reader.readAsDataURL(file);
-      });
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+      const units = ["B", "KB", "MB", "GB"];
+      const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      const value = bytes / (1024 ** unitIndex);
+      return `${value >= 10 || unitIndex === 0 ? Math.round(value) : value.toFixed(1)} ${units[unitIndex]}`;
     }
 
-    function splitChunks(value) {
-      const chunks = [];
-      for (let i = 0; i < value.length; i += CHUNK_SIZE) chunks.push(value.slice(i, i + CHUNK_SIZE));
-      return chunks;
+    function bytesToBase64(bytes) {
+      const segments = [];
+      const segmentSize = 32768;
+      for (let index = 0; index < bytes.length; index += segmentSize) {
+        segments.push(String.fromCharCode(...bytes.subarray(index, index + segmentSize)));
+      }
+      return btoa(segments.join(""));
+    }
+
+    function base64ToBytes(value) {
+      const binary = atob(value);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+      return bytes;
+    }
+
+    async function mapWithConcurrency(count, limit, callback) {
+      const results = new Array(count);
+      let nextIndex = 0;
+
+      async function worker() {
+        while (nextIndex < count) {
+          const index = nextIndex++;
+          results[index] = await callback(index);
+        }
+      }
+
+      const workerCount = Math.min(count, limit);
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+      return results;
+    }
+
+    function chunkCountForBlob(blob) {
+      return Math.ceil(blob.size / BINARY_CHUNK_BYTES);
+    }
+
+    async function storeBlobChunks(blob, key, owner, onProgress = () => {}) {
+      const chunkCount = chunkCountForBlob(blob);
+      let completed = 0;
+      await mapWithConcurrency(chunkCount, CHUNK_UPLOAD_CONCURRENCY, async index => {
+        const start = index * BINARY_CHUNK_BYTES;
+        const bytes = new Uint8Array(await blob.slice(start, start + BINARY_CHUNK_BYTES).arrayBuffer());
+        await setDoc(doc(db, COLL, `chunk_${key}_${index}`), {
+          kind: "chunk",
+          key,
+          index,
+          data: bytesToBase64(bytes),
+          encoding: CHUNK_ENCODING,
+          owner
+        });
+        completed++;
+        onProgress(completed, chunkCount);
+      });
+      return chunkCount;
+    }
+
+    async function deleteChunkSet(key, chunkCount) {
+      if (!key || !chunkCount) return;
+      await mapWithConcurrency(chunkCount, CHUNK_FETCH_CONCURRENCY, index => (
+        deleteDoc(doc(db, COLL, `chunk_${key}_${index}`))
+      ));
+    }
+
+    function canvasToBlob(canvas, type, quality) {
+      return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+    }
+
+    async function createCompressedPreview(file) {
+      let source;
+      let sourceUrl = "";
+      let cleanup = () => {};
+
+      if ("createImageBitmap" in window) {
+        try {
+          source = await createImageBitmap(file);
+          cleanup = () => source.close();
+        } catch {
+          source = null;
+        }
+      }
+
+      if (!source) {
+        sourceUrl = URL.createObjectURL(file);
+        source = new Image();
+        source.decoding = "async";
+        cleanup = () => URL.revokeObjectURL(sourceUrl);
+        try {
+          await new Promise((resolve, reject) => {
+            source.addEventListener("load", resolve, { once: true });
+            source.addEventListener("error", () => reject(new Error("This image format cannot be previewed in this browser")), { once: true });
+            source.src = sourceUrl;
+          });
+        } catch (error) {
+          cleanup();
+          throw error;
+        }
+      }
+
+      try {
+        const width = source.width || source.naturalWidth;
+        const height = source.height || source.naturalHeight;
+        if (!width || !height) throw new Error("This image has invalid dimensions");
+        const scale = Math.min(1, PREVIEW_MAX_DIMENSION / Math.max(width, height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        const context = canvas.getContext("2d", { alpha: true });
+        if (!context) throw new Error("Could not create an image preview");
+        context.drawImage(source, 0, 0, canvas.width, canvas.height);
+        let preview = await canvasToBlob(canvas, "image/webp", 0.78);
+        if (!preview || preview.type !== "image/webp") {
+          preview = await canvasToBlob(canvas, "image/jpeg", 0.82);
+        }
+        if (!preview) throw new Error("Could not compress the image preview");
+        return preview;
+      } finally {
+        cleanup();
+      }
     }
 
     function dataUrlToBlob(dataUrl) {
@@ -1069,8 +1253,9 @@
     }
 
     function updateSendState() {
-      sendButton.disabled = saving || audioState !== "idle" || !currentUser || (!messageInput.value.trim() && staged.length === 0);
-      micButton.disabled = saving || audioState === "transcribing" || !currentUser || !audioCaptureSupported;
+      sendButton.disabled = saving || preparingFiles > 0 || audioState !== "idle" || !currentUser || (!messageInput.value.trim() && staged.length === 0);
+      micButton.disabled = saving || preparingFiles > 0 || audioState === "transcribing" || !currentUser || !audioCaptureSupported;
+      attachButton.disabled = saving || preparingFiles > 0 || !currentUser;
     }
 
     function closeAttachmentMenu() {
@@ -1079,29 +1264,51 @@
     }
 
     async function addFiles(fileList) {
+      if (saving) {
+        toast("Wait for the current upload to finish");
+        return;
+      }
       const all = [...fileList];
       const images = all.filter(isImage);
       const skipped = all.length - images.length;
       if (skipped) toast(`${skipped} non-image file${skipped === 1 ? " was" : "s were"} skipped`);
+      if (!images.length) return;
 
-      for (const file of images) {
-        if (file.size > MAX_FILE_BYTES) {
-          toast(`${file.name || "That image"} is over 15 MB`, true);
-          continue;
-        }
-        try {
-          const dataUrl = await readAsDataUrl(file);
-          staged.push({
-            name: file.name || `pasted-${Date.now()}.${extFromMime(file.type)}`,
-            type: file.type || "",
-            dataUrl
-          });
-        } catch (error) {
-          toast(error.message, true);
-        }
-      }
-      renderStaged();
+      preparingFiles++;
       updateSendState();
+      try {
+        for (const file of images) {
+          try {
+            const needsPreview = file.size > PREVIEW_THRESHOLD_BYTES;
+            composerMeta.textContent = needsPreview
+              ? `Creating preview for ${file.name || "large image"}…`
+              : `Adding ${file.name || "image"}…`;
+            const previewBlob = needsPreview ? await createCompressedPreview(file) : null;
+            staged.push({
+              name: file.name || `pasted-${Date.now()}.${extFromMime(file.type)}`,
+              type: file.type || "application/octet-stream",
+              size: file.size,
+              file,
+              previewBlob,
+              objectUrl: URL.createObjectURL(previewBlob || file)
+            });
+          } catch (error) {
+            console.error(error);
+            toast(`${file.name || "That image"}: ${error.message}`, true);
+          }
+        }
+      } finally {
+        preparingFiles--;
+        if (!preparingFiles) composerMeta.textContent = "";
+        renderStaged();
+        updateSendState();
+      }
+    }
+
+    function releaseStaged(items = staged) {
+      for (const item of items) {
+        if (item.objectUrl) URL.revokeObjectURL(item.objectUrl);
+      }
     }
 
     function renderStaged() {
@@ -1110,19 +1317,25 @@
         const tile = document.createElement("div");
         tile.className = "staged-item";
         const image = document.createElement("img");
-        image.src = item.dataUrl;
+        image.src = item.objectUrl;
         image.alt = item.name;
+        const size = document.createElement("span");
+        size.className = "staged-size";
+        size.textContent = formatBytes(item.size);
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "remove-staged";
+        remove.disabled = saving;
         remove.setAttribute("aria-label", `Remove ${item.name}`);
         remove.innerHTML = iconX;
         remove.addEventListener("click", () => {
-          staged.splice(index, 1);
+          if (saving) return;
+          const [removed] = staged.splice(index, 1);
+          if (removed?.objectUrl) URL.revokeObjectURL(removed.objectUrl);
           renderStaged();
           updateSendState();
         });
-        tile.append(image, remove);
+        tile.append(image, size, remove);
         stagedTray.append(tile);
       });
     }
@@ -1437,27 +1650,51 @@
       }
 
       const outgoingImages = [...staged];
+      const uploadedChunkSets = [];
+      closeAttachmentMenu();
       saving = true;
       composerMeta.textContent = outgoingImages.length ? "Preparing images…" : "Sending…";
       updateSendState();
+      renderStaged();
 
       try {
         const imageMetadata = [];
         for (let imageIndex = 0; imageIndex < outgoingImages.length; imageIndex++) {
-          composerMeta.textContent = `Sending image ${imageIndex + 1} of ${outgoingImages.length}…`;
           const image = outgoingImages[imageIndex];
           const key = crypto.randomUUID();
-          const parts = splitChunks(image.dataUrl);
-          for (let partIndex = 0; partIndex < parts.length; partIndex++) {
-            await setDoc(doc(db, COLL, `chunk_${key}_${partIndex}`), {
-              kind: "chunk",
-              key,
-              index: partIndex,
-              data: parts[partIndex],
-              owner: currentUser.uid
-            });
+          const chunkCount = chunkCountForBlob(image.file);
+          uploadedChunkSets.push({ key, chunks: chunkCount });
+          await storeBlobChunks(image.file, key, currentUser.uid, (completed, total) => {
+            const percent = Math.round((completed / total) * 100);
+            composerMeta.textContent = `Uploading image ${imageIndex + 1} of ${outgoingImages.length} · ${percent}%`;
+          });
+
+          const metadata = {
+            name: image.name,
+            type: image.type,
+            size: image.size,
+            key,
+            chunks: chunkCount,
+            encoding: CHUNK_ENCODING,
+            downloadOnly: image.size >= DOWNLOAD_ONLY_BYTES
+          };
+
+          if (image.previewBlob) {
+            const previewKey = crypto.randomUUID();
+            const previewChunks = chunkCountForBlob(image.previewBlob);
+            uploadedChunkSets.push({ key: previewKey, chunks: previewChunks });
+            composerMeta.textContent = `Uploading preview ${imageIndex + 1} of ${outgoingImages.length}…`;
+            await storeBlobChunks(image.previewBlob, previewKey, currentUser.uid);
+            metadata.preview = {
+              key: previewKey,
+              chunks: previewChunks,
+              type: image.previewBlob.type || "image/webp",
+              size: image.previewBlob.size,
+              encoding: CHUNK_ENCODING
+            };
           }
-          imageMetadata.push({ name: image.name, type: image.type, key, chunks: parts.length });
+
+          imageMetadata.push(metadata);
         }
 
         await addDoc(collection(db, COLL), {
@@ -1469,6 +1706,7 @@
         });
 
         messageInput.value = "";
+        releaseStaged(outgoingImages);
         staged = [];
         renderStaged();
         autoSizeInput();
@@ -1477,46 +1715,163 @@
       } catch (error) {
         console.error(error);
         composerMeta.textContent = "";
+        if (uploadedChunkSets.length) {
+          await Promise.allSettled(
+            uploadedChunkSets.map(item => deleteChunkSet(item.key, item.chunks))
+          );
+        }
         toast(`Message failed: ${error.code || error.message}`, true);
       } finally {
         saving = false;
+        renderStaged();
         updateSendState();
         messageInput.focus();
       }
     }
 
-    async function getImageUrl(meta) {
-      if (imageUrlCache.has(meta.key)) return imageUrlCache.get(meta.key);
-      const snapshots = await Promise.all(
-        Array.from({ length: meta.chunks }, (_, index) => getDoc(doc(db, COLL, `chunk_${meta.key}_${index}`)))
-      );
-      if (snapshots.some(snapshot => !snapshot.exists())) throw new Error("Image data is incomplete");
-      const dataUrl = snapshots.map(snapshot => snapshot.data().data).join("");
-      const url = URL.createObjectURL(dataUrlToBlob(dataUrl));
-      imageUrlCache.set(meta.key, url);
-      return url;
+    async function getImageUrl(meta, { cache = true } = {}) {
+      if (cache && imageUrlCache.has(meta.key)) return imageUrlCache.get(meta.key);
+      if (cache && imageUrlPending.has(meta.key)) return imageUrlPending.get(meta.key);
+
+      const loadPromise = (async () => {
+        const chunkCount = Number(meta.chunks);
+        if (!meta.key || !Number.isInteger(chunkCount) || chunkCount < 1) {
+          throw new Error("Image metadata is incomplete");
+        }
+
+        let blob;
+        if (meta.encoding === CHUNK_ENCODING) {
+          const byteParts = await mapWithConcurrency(chunkCount, CHUNK_FETCH_CONCURRENCY, async index => {
+            const snapshot = await getDoc(doc(db, COLL, `chunk_${meta.key}_${index}`));
+            if (!snapshot.exists()) throw new Error("Image data is incomplete");
+            const encoded = String(snapshot.data().data || "");
+            if (!encoded) throw new Error("Image data is incomplete");
+            return base64ToBytes(encoded);
+          });
+          blob = new Blob(byteParts, { type: meta.type || "application/octet-stream" });
+        } else {
+          const dataParts = await mapWithConcurrency(chunkCount, CHUNK_FETCH_CONCURRENCY, async index => {
+            const snapshot = await getDoc(doc(db, COLL, `chunk_${meta.key}_${index}`));
+            if (!snapshot.exists()) throw new Error("Image data is incomplete");
+            return String(snapshot.data().data || "");
+          });
+          blob = dataUrlToBlob(dataParts.join(""));
+        }
+
+        const expectedSize = Number(meta.size);
+        if (Number.isFinite(expectedSize) && expectedSize > 0 && blob.size !== expectedSize) {
+          throw new Error("Image data did not pass its size check");
+        }
+
+        const url = URL.createObjectURL(blob);
+        if (cache) imageUrlCache.set(meta.key, url);
+        return url;
+      })();
+
+      if (cache) imageUrlPending.set(meta.key, loadPromise);
+      try {
+        return await loadPromise;
+      } finally {
+        if (cache) imageUrlPending.delete(meta.key);
+      }
     }
 
-    function openLightbox(url, name) {
+    function openLightbox(url, name, key, downloadUrl = url) {
+      if (temporaryDownloadUrl) {
+        URL.revokeObjectURL(temporaryDownloadUrl);
+        temporaryDownloadUrl = "";
+      }
+      activeLightboxKey = key || null;
+      lightbox.classList.remove("is-loading");
+      lightbox.setAttribute("aria-busy", "false");
       lightboxImage.src = url;
       lightboxImage.alt = name || "Message image";
-      lightboxDownload.href = url;
       lightboxDownload.download = name || "image";
+      lightboxDownload.hidden = !downloadUrl;
+      if (downloadUrl) lightboxDownload.href = downloadUrl;
+      else lightboxDownload.removeAttribute("href");
       lightbox.hidden = false;
       document.body.style.overflow = "hidden";
       lightboxClose.focus();
     }
 
     function closeLightbox() {
+      activeLightboxKey = null;
+      lightbox.classList.remove("is-loading");
+      lightbox.setAttribute("aria-busy", "false");
+      if (temporaryDownloadUrl) {
+        URL.revokeObjectURL(temporaryDownloadUrl);
+        temporaryDownloadUrl = "";
+      }
       lightbox.hidden = true;
       lightboxImage.removeAttribute("src");
       lightboxDownload.removeAttribute("href");
+      lightboxDownload.hidden = false;
       document.body.style.overflow = "";
+    }
+
+    async function openFullImage(meta, previewUrl) {
+      openLightbox(previewUrl, meta.name, meta.key, null);
+      lightbox.classList.add("is-loading");
+      lightbox.setAttribute("aria-busy", "true");
+      toast(`Loading full-size ${formatBytes(meta.size)} image…`);
+      try {
+        const fullUrl = await getImageUrl(meta);
+        if (activeLightboxKey !== meta.key || lightbox.hidden) return;
+        lightboxImage.src = fullUrl;
+        lightboxDownload.href = fullUrl;
+        lightboxDownload.download = meta.name || "image";
+        lightboxDownload.hidden = false;
+      } catch (error) {
+        console.error(error);
+        toast("The full-size image could not be opened", true);
+      } finally {
+        if (activeLightboxKey === meta.key) {
+          lightbox.classList.remove("is-loading");
+          lightbox.setAttribute("aria-busy", "false");
+        }
+      }
+    }
+
+    async function prepareOriginalDownload(meta, previewUrl, tile) {
+      if (tile.dataset.busy === "true") return;
+      tile.dataset.busy = "true";
+      tile.disabled = true;
+      openLightbox(previewUrl, meta.name, meta.key, null);
+      lightbox.classList.add("is-loading");
+      lightbox.setAttribute("aria-busy", "true");
+      toast(`Preparing ${formatBytes(meta.size)} download…`);
+      try {
+        const url = await getImageUrl(meta, { cache: false });
+        if (activeLightboxKey !== meta.key || lightbox.hidden) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        temporaryDownloadUrl = url;
+        lightboxDownload.href = url;
+        lightboxDownload.download = meta.name || "image";
+        lightboxDownload.hidden = false;
+        toast("Download ready · tap the arrow");
+      } catch (error) {
+        console.error(error);
+        toast("The original image could not be downloaded", true);
+      } finally {
+        if (activeLightboxKey === meta.key) {
+          lightbox.classList.remove("is-loading");
+          lightbox.setAttribute("aria-busy", "false");
+        }
+        tile.disabled = false;
+        delete tile.dataset.busy;
+      }
     }
 
     async function hydrateMedia(tile, meta) {
       try {
-        const url = await getImageUrl(meta);
+        const hasPreview = Boolean(meta.preview?.key && meta.preview?.chunks);
+        const displayMeta = hasPreview
+          ? { ...meta.preview, name: meta.name }
+          : meta;
+        const url = await getImageUrl(displayMeta);
         const image = document.createElement("img");
         image.alt = meta.name || "Attached image";
         image.loading = "lazy";
@@ -1524,7 +1879,26 @@
         image.addEventListener("load", () => tile.classList.add("loaded"), { once: true });
         image.addEventListener("error", () => tile.classList.add("failed"), { once: true });
         tile.prepend(image);
-        tile.addEventListener("click", () => openLightbox(url, meta.name));
+
+        const downloadOnly = Boolean(meta.downloadOnly || Number(meta.size) >= DOWNLOAD_ONLY_BYTES);
+        if (hasPreview) {
+          const badge = document.createElement("span");
+          badge.className = "media-badge";
+          badge.textContent = downloadOnly
+            ? `Download original · ${formatBytes(meta.size)}`
+            : `Tap for full · ${formatBytes(meta.size)}`;
+          tile.append(badge);
+        }
+
+        if (downloadOnly) {
+          tile.classList.add("download-only");
+          tile.setAttribute("aria-label", `Download ${meta.name || "original image"}`);
+          tile.addEventListener("click", () => prepareOriginalDownload(meta, url, tile));
+        } else if (hasPreview) {
+          tile.addEventListener("click", () => openFullImage(meta, url));
+        } else {
+          tile.addEventListener("click", () => openLightbox(url, meta.name, meta.key));
+        }
       } catch (error) {
         console.error(error);
         tile.classList.add("failed");
@@ -1547,17 +1921,20 @@
       if (!confirm("Delete this message permanently?")) return;
       button.disabled = true;
       try {
-        const operations = [deleteDoc(doc(db, COLL, message.id))];
+        const chunkDeletes = [];
         for (const image of message.images || []) {
-          for (let index = 0; index < image.chunks; index++) {
-            operations.push(deleteDoc(doc(db, COLL, `chunk_${image.key}_${index}`)));
-          }
+          chunkDeletes.push(deleteChunkSet(image.key, image.chunks));
+          if (image.preview?.key) chunkDeletes.push(deleteChunkSet(image.preview.key, image.preview.chunks));
         }
-        await Promise.all(operations);
+        await Promise.all(chunkDeletes);
+        await deleteDoc(doc(db, COLL, message.id));
         for (const image of message.images || []) {
-          const url = imageUrlCache.get(image.key);
-          if (url) URL.revokeObjectURL(url);
-          imageUrlCache.delete(image.key);
+          for (const key of [image.key, image.preview?.key].filter(Boolean)) {
+            const url = imageUrlCache.get(key);
+            if (url) URL.revokeObjectURL(url);
+            imageUrlCache.delete(key);
+            imageUrlPending.delete(key);
+          }
         }
         toast("Message deleted");
       } catch (error) {
@@ -1581,7 +1958,8 @@
           const tile = document.createElement("button");
           tile.type = "button";
           tile.className = "media-tile";
-          tile.setAttribute("aria-label", `Open ${meta.name || "image"}`);
+          const downloadOnly = Boolean(meta.downloadOnly || Number(meta.size) >= DOWNLOAD_ONLY_BYTES);
+          tile.setAttribute("aria-label", `${downloadOnly ? "Download" : "Open"} ${meta.name || "image"}`);
           const placeholder = document.createElement("span");
           placeholder.className = "media-placeholder";
           placeholder.innerHTML = iconImage;
@@ -1763,6 +2141,12 @@
     window.addEventListener("scroll", updateScrollButton, { passive: true });
 
     lightboxClose.addEventListener("click", closeLightbox);
+    lightboxDownload.addEventListener("click", () => {
+      if (!temporaryDownloadUrl) return;
+      const downloadedUrl = temporaryDownloadUrl;
+      temporaryDownloadUrl = "";
+      setTimeout(() => URL.revokeObjectURL(downloadedUrl), 60000);
+    });
     lightbox.addEventListener("click", event => {
       if (event.target === lightbox) closeLightbox();
     });
@@ -1776,6 +2160,8 @@
     window.addEventListener("beforeunload", () => {
       stopRecordingTimer();
       stopMediaTracks();
+      releaseStaged();
+      if (temporaryDownloadUrl) URL.revokeObjectURL(temporaryDownloadUrl);
       for (const url of imageUrlCache.values()) URL.revokeObjectURL(url);
     });
 
