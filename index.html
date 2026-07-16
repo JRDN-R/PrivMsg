@@ -34,7 +34,7 @@
         [
           "row.className = \"message-row\";",
           "row.className = \"message-row\"; row.dataset.messageId = message.id; row.dataset.threadId = message.threadId || \"\";"
-        ],
+        ]
       ];
 
       for (const [before, after] of replacements) {
@@ -58,7 +58,7 @@
 
       html = html.replace(
         "</body>",
-        '<script type="module" src="./enhancements.js?v=20260716-1"><\/script></body>'
+        '<script type="module" src="./enhancements.js?v=20260716-2"><\/script></body>'
       );
       document.open();
       document.write(html);
