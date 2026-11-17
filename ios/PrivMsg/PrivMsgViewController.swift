@@ -94,7 +94,7 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
             guard let self else { return }
             do {
                 if server == nil {
-                    guard let resources = Bundle.main.url(forResource: "Resources", withExtension: nil) else {
+                    guard let resources = Bundle.main.url(forResource: "WebContent", withExtension: nil) else {
                         throw NSError(domain: "PrivMsg", code: 1, userInfo: [NSLocalizedDescriptionKey: "The app's bundled files are missing. Run the installer again."])
                     }
                     server = LocalWebServer(resourceDirectory: resources)

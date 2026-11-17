@@ -19,7 +19,9 @@ jobs:
         run: |
           python3 ios/generate_project.py
           python3 ios/validate_project.py
+          python3 -m unittest discover -s ios/tests -p 'test_*.py'
           bash -n ios/Install-PrivMsg.command
+          bash -n ios/tools/verify_simulator_bundle.sh
       - name: Compile for iOS Simulator
         run: |
           set -o pipefail
@@ -27,6 +29,10 @@ jobs:
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/PrivMsgDerivedData" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+      - name: Verify Simulator bundle and ad hoc signature
+        run: |
+          bash ios/tools/verify_simulator_bundle.sh \
+            "$RUNNER_TEMP/PrivMsgDerivedData/Build/Products/Debug-iphonesimulator/PrivMsg.app"
       - name: Launch on iPhone Simulator
         run: |
           bash ios/tools/simulator_smoke.sh \

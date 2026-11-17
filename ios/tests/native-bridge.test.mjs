@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as tick } from 'node:timers/promises';
 import fs from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-import { installNativeBridge } from '../PrivMsg/Resources/native-bridge.js';
+import { installNativeBridge } from '../PrivMsg/WebContent/native-bridge.js';
 
 function setup() {
   const window = new EventTarget();
@@ -97,7 +97,7 @@ test('sign-out publishes an empty native file list', async () => {
 });
 
 test('bundled app JavaScript parses and has native hooks with no remote bootstrap', async () => {
-  const resources=new URL('../PrivMsg/Resources/',import.meta.url);
+  const resources=new URL('../PrivMsg/WebContent/',import.meta.url);
   const html=await fs.readFile(new URL('index.html',resources),'utf8');
   assert.ok(!html.includes('raw.githubusercontent.com'));
   assert.ok(html.includes('installNativeBridge({'));

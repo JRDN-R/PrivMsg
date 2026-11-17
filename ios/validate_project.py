@@ -104,8 +104,10 @@ def validate(root=ROOT):
     resource_phase = next(objects[ident] for ident in phase_ids if objects[ident]["isa"] == "PBXResourcesBuildPhase")
     copied_resources = {objects[objects[ident]["fileRef"]]["path"] for ident in resource_phase["files"]}
     assert "Assets.xcassets" in copied_resources, "App icons are not in the resource phase"
-    if (app / "Resources").is_dir():
-        assert "Resources" in copied_resources, "Bundled web files are missing from resources"
+    assert "Resources" not in copied_resources, "iOS app bundles cannot contain a top-level Resources folder"
+    assert not (app / "Resources").exists(), "Rename the reserved Resources folder to WebContent"
+    assert (app / "WebContent").is_dir(), "Bundled web content is missing"
+    assert "WebContent" in copied_resources, "Bundled web files are missing from resources"
     for path in referenced_swift | copied_resources | {"Info.plist"}:
         assert (app / path).exists(), f"Missing app file: {path}"
 

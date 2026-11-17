@@ -85,7 +85,7 @@ def project_objects(source_names, team, bundle, has_resources):
     resource_refs = [asset_ref]
     resource_builds = [add("build:assets", isa="PBXBuildFile", fileRef=asset_ref)]
     if has_resources:
-        resource_ref = add("Resources", isa="PBXFileReference", lastKnownFileType="folder", path="Resources", sourceTree="<group>")
+        resource_ref = add("WebContent", isa="PBXFileReference", lastKnownFileType="folder", path="WebContent", sourceTree="<group>")
         resource_refs.append(resource_ref)
         resource_builds.append(add("build:resources", isa="PBXBuildFile", fileRef=resource_ref))
     product = add("product", isa="PBXFileReference", explicitFileType="wrapper.application", includeInIndex=0, path="PrivMsg.app", sourceTree="BUILT_PRODUCTS_DIR")
@@ -137,13 +137,15 @@ def generate(team=None, bundle=None, root=ROOT):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]+", bundle) or "." not in bundle or ".." in bundle:
         raise ValueError("Bundle identifier must be a reverse-domain identifier such as com.jordanrapp.PrivMsg.")
     app = root / "PrivMsg"
+    if (app / "Resources").exists():
+        raise ValueError("iOS app bundles cannot contain a Resources folder. Run tools/repair_bundle_layout.py for this older project.")
     sources = sorted(p.relative_to(app).as_posix() for p in app.rglob("*.swift"))
     if not sources:
         raise ValueError("No Swift app sources were found. Extract the entire PrivMsg package before running this script.")
     for required in [app / "Info.plist", app / "Assets.xcassets"]:
         if not required.exists():
             raise ValueError(f"Missing required app resource: {required}")
-    tree = project_objects(sources, team, bundle, (app / "Resources").is_dir())
+    tree = project_objects(sources, team, bundle, (app / "WebContent").is_dir())
     project = root / "PrivMsg.xcodeproj"
     project.mkdir(exist_ok=True)
     write_if_changed(project / "project.pbxproj", "// !$*UTF8*$!\n" + serialize(tree) + "\n")

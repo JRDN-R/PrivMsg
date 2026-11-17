@@ -86,6 +86,22 @@ bundle identifier is already registered to another Apple team, choose a unique
 identifier in Xcode or use `--bundle-id`, then keep that identifier for renewals.
 Keep the extracted package for rerunning the installer.
 
+## Repair the first downloadable package
+
+The initial package incorrectly copied a top-level `Resources` directory into
+the iOS app bundle. Apple reserves that name. It can cause CodeSign to report
+an unsigned icon PNG, or Simulator installation to report a missing bundle ID.
+Current packages use `WebContent` and CI verifies the built bundle and signature.
+
+For an already configured original download, save and quit Xcode, then run the
+current `tools/repair_bundle_layout.py` with the old package's `ios` folder as its
+argument. It backs up changed project files, renames the folder, updates the
+references, and preserves the Team and bundle identifier saved in Xcode. Reopen
+the project, use Product > Clean Build Folder (Shift-Command-K), and Run again.
+Cleaning is necessary to remove the old directory from the previous build.
+
+Apple reference: [iOS bundle structure](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/BundleTypes/BundleTypes.html).
+
 ## Verification
 
 `python3 generate_project.py` regenerates the project. `python3

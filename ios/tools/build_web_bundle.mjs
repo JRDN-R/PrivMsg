@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 
 const ios = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repo = path.resolve(ios, '..');
-const resources = path.join(ios, 'PrivMsg/Resources');
+const resources = path.join(ios, 'PrivMsg/WebContent');
 const entry = await fs.readFile(path.join(repo, 'index.html'), 'utf8');
 const base = await fs.readFile(path.join(ios, 'vendor/base-index.html'), 'utf8');
 let html;

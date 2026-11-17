@@ -92,15 +92,15 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "545C086DAE4D56D03437FBB8";
 		};
-		"EE40A20BFD86F9B936803E81" = {
+		"4392428579DB64F774CCACDC" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "folder";
-			"path" = "Resources";
+			"path" = "WebContent";
 			"sourceTree" = "<group>";
 		};
 		"9D0AE195507138713D6028DA" = {
 			"isa" = "PBXBuildFile";
-			"fileRef" = "EE40A20BFD86F9B936803E81";
+			"fileRef" = "4392428579DB64F774CCACDC";
 		};
 		"617B5D54B4F869FE4073733E" = {
 			"isa" = "PBXFileReference";
@@ -121,7 +121,7 @@
 				"631C460D474A499E5294F5FE",
 				"E2BF13BE22BE659C79639D80",
 				"545C086DAE4D56D03437FBB8",
-				"EE40A20BFD86F9B936803E81",
+				"4392428579DB64F774CCACDC",
 			);
 			"path" = "PrivMsg";
 			"sourceTree" = "<group>";

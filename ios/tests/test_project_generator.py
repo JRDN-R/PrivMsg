@@ -70,6 +70,18 @@ class SigningIdentityTests(unittest.TestCase):
         project.write_text(project.read_text().replace(generator.DEFAULT_BUNDLE, "com.jordanrapp.NewCustomID"))
         self.assertEqual(generator.current_signing(self.root), {"team": "ABCDE12345", "bundle": "com.jordanrapp.NewCustomID"})
 
+    def test_web_content_has_safe_bundle_folder_name(self):
+        (self.root / "PrivMsg" / "WebContent").mkdir()
+        _, tree = generator.generate(root=self.root)
+        folders = [obj["path"] for obj in tree["objects"].values()
+                   if obj.get("isa") == "PBXFileReference" and obj.get("lastKnownFileType") == "folder"]
+        self.assertEqual(folders, ["WebContent"])
+
+    def test_reserved_resources_directory_is_rejected(self):
+        (self.root / "PrivMsg" / "Resources").mkdir()
+        with self.assertRaisesRegex(ValueError, "cannot contain a Resources folder"):
+            generator.generate(root=self.root)
+
 
 if __name__ == "__main__":
     unittest.main()
