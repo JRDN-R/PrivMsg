@@ -21,6 +21,14 @@
       let html = await response.text();
 
       const replacements = [
+        [
+          '<script type="module">',
+          '<script type="module">\n    import { installClipboardUploads } from "./clipboard.js?v=20261117-1";'
+        ],
+        [
+          'if ((!text && !staged.length) || saving) return;',
+          'if ((!text && !staged.length) || saving || preparingFiles > 0 || audioState !== "idle") return;'
+        ],
         ["const PREVIEW_THRESHOLD_BYTES = 15 * 1024 * 1024;", "const PREVIEW_THRESHOLD_BYTES = 4 * 1024 * 1024;"],
         ["const CHUNK_UPLOAD_CONCURRENCY = 4;", "const CHUNK_UPLOAD_CONCURRENCY = 6;"],
         ["const CHUNK_FETCH_CONCURRENCY = 10;", "const CHUNK_FETCH_CONCURRENCY = 12;"],
@@ -41,6 +49,28 @@
         if (!html.includes(before)) throw new Error("PrivMsg compatibility patch did not match the saved app.");
         html = html.replace(before, after);
       }
+
+      const clipboardButtonPattern = /    async function pasteFromClipboard\(\) \{[\s\S]*?\n    \}\n\n    async function sendMessage/;
+      if (!clipboardButtonPattern.test(html)) throw new Error("Could not update clipboard uploads.");
+      html = html.replace(clipboardButtonPattern, `    const { pasteFromClipboard } = installClipboardUploads({
+      input: messageInput,
+      addFiles,
+      insertText: insertTextAtCursor,
+      closeMenu: closeAttachmentMenu,
+      canAcceptFiles: () => Boolean(currentUser) && !saving,
+      setReading: reading => {
+        preparingFiles += reading ? 1 : -1;
+        if (!preparingFiles) composerMeta.textContent = "";
+        updateSendState();
+      },
+      notify: toast
+    });
+
+    async function sendMessage`);
+
+      const imagePastePattern = /    document\.addEventListener\("paste", event => \{[\s\S]*?\n    \}\);/;
+      if (!imagePastePattern.test(html)) throw new Error("Could not replace the image-only paste handler.");
+      html = html.replace(imagePastePattern, "");
 
       const ownerPattern = /owner: currentUser\.uid,\s*createdAt: serverTimestamp\(\)/;
       if (!ownerPattern.test(html)) throw new Error("Could not add conversation IDs to outgoing messages.");
@@ -70,3 +100,4 @@
   </script>
 </body>
 </html>
+
