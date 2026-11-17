@@ -22,6 +22,13 @@ jobs:
           python3 -m unittest discover -s ios/tests -p 'test_*.py'
           bash -n ios/Install-PrivMsg.command
           bash -n ios/tools/verify_simulator_bundle.sh
+      - name: Exercise the real loopback web server
+        run: |
+          xcrun swiftc -swift-version 5 -parse-as-library \
+            -target "$(uname -m)-apple-macosx13.0" \
+            ios/PrivMsg/LocalWebServer.swift ios/tests/local_web_server_smoke.swift \
+            -o "$RUNNER_TEMP/privmsg-local-server-smoke"
+          "$RUNNER_TEMP/privmsg-local-server-smoke"
       - name: Compile for iOS Simulator
         run: |
           set -o pipefail

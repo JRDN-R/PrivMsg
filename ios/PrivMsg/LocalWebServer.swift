@@ -55,8 +55,10 @@ final class LocalWebServer {
         let parameters = NWParameters.tcp
         // Explicit binding is essential: an unspecified listener address would
         // expose the server to Wi-Fi and other network interfaces.
-        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: port)
-        let newListener = try NWListener(using: parameters, on: port)
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: port)
+        // The endpoint already supplies the port. The separate `on:` overload
+        // conflicts with a requiredLocalEndpoint and can throw EINVAL.
+        let newListener = try NWListener(using: parameters)
         let currentGeneration = UUID()
         generation = currentGeneration
         listener = newListener
