@@ -16,7 +16,7 @@ class BuiltAppTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.app = Path(self.temp.name) / "PrivMsg.app"
         (self.app / "WebContent").mkdir(parents=True)
-        for name in ("index.html", "enhancements.js", "clipboard.js", "native-bridge.js"):
+        for name in ("index.html", "enhancements.js", "clipboard.js", "native-bridge.js", "app-icon.png"):
             (self.app / "WebContent" / name).write_text("fixture")
         (self.app / "PrivMsg").write_bytes(b"simulated executable")
         self.info = dict(CFBundleIdentifier="com.jordanrapp.PrivMsg",

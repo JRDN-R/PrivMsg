@@ -17,7 +17,7 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
     private var snapshot: NativeSnapshot?
     private var cachedSession: NativeSession?
     private var sessionCachedAt = Date.distantPast
-    private let loading = UIStackView()
+    private let loading = UIScrollView()
     private let loadingLabel = UILabel()
     private let retryButton = UIButton(type: .system)
     private var timeout: Task<Void, Never>?
@@ -32,6 +32,7 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "PrivMsg"
+        installBrandedTitle()
         view.backgroundColor = UIColor(red: 0.067, green: 0.075, blue: 0.082, alpha: 1)
         let content = WKUserContentController()
         content.add(WeakMessageHandler(self), name: "privmsg")
@@ -69,23 +70,95 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
         startApp()
     }
 
+    private func brandImageView(size: CGFloat) -> UIImageView {
+        let image = UIImageView(image: UIImage(named: "BrandLogo"))
+        image.contentMode = .scaleAspectFit
+        image.backgroundColor = .black
+        image.layer.cornerRadius = size * 0.2
+        image.clipsToBounds = true
+        image.isAccessibilityElement = false
+        image.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            image.widthAnchor.constraint(equalToConstant: size),
+            image.heightAnchor.constraint(equalToConstant: size)
+        ])
+        return image
+    }
+
+    private func installBrandedTitle() {
+        let name = UILabel()
+        name.text = "PrivMsg"
+        name.textColor = .label
+        name.font = UIFontMetrics(forTextStyle: .headline).scaledFont(
+            for: .systemFont(ofSize: 17, weight: .semibold), maximumPointSize: 23
+        )
+        name.adjustsFontForContentSizeCategory = true
+        name.adjustsFontSizeToFitWidth = true
+        name.minimumScaleFactor = 0.8
+        name.lineBreakMode = .byTruncatingTail
+        name.isAccessibilityElement = false
+        let brandedTitle = UIStackView(arrangedSubviews: [brandImageView(size: 30), name])
+        brandedTitle.axis = .horizontal
+        brandedTitle.alignment = .center
+        brandedTitle.spacing = 8
+        brandedTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        brandedTitle.isAccessibilityElement = true
+        brandedTitle.accessibilityLabel = "PrivMsg"
+        brandedTitle.accessibilityTraits = .header
+        navigationItem.titleView = brandedTitle
+    }
+
     private func installLoadingView() {
-        loading.axis = .vertical
-        loading.alignment = .center
-        loading.spacing = 16
         loading.translatesAutoresizingMaskIntoConstraints = false
+        loading.alwaysBounceVertical = false
+        let content = UIView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 16
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        loadingLabel.text = "Opening PrivMsg…"
+        loadingLabel.font = .preferredFont(forTextStyle: .body)
+        loadingLabel.adjustsFontForContentSizeCategory = true
         loadingLabel.textColor = .secondaryLabel
         loadingLabel.numberOfLines = 0
         loadingLabel.textAlignment = .center
         retryButton.setTitle("Try again", for: .normal)
+        retryButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
+        retryButton.titleLabel?.adjustsFontForContentSizeCategory = true
+        retryButton.isHidden = true
         retryButton.addTarget(self, action: #selector(retry), for: .touchUpInside)
-        loading.addArrangedSubview(loadingLabel)
-        loading.addArrangedSubview(retryButton)
+        stack.addArrangedSubview(brandImageView(size: 96))
+        stack.addArrangedSubview(loadingLabel)
+        stack.addArrangedSubview(retryButton)
         view.addSubview(loading)
+        loading.addSubview(content)
+        content.addSubview(stack)
+        // Center short states; let long errors or larger accessibility text
+        // scroll instead of squeezing the logo or creating conflicting heights.
+        let preferredHeight = content.heightAnchor.constraint(equalTo: loading.frameLayoutGuide.heightAnchor)
+        preferredHeight.priority = .defaultLow
+        let retryHeight = retryButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
+        retryHeight.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            loading.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loading.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            loading.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.82)
+            loading.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            loading.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            loading.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            loading.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: loading.contentLayoutGuide.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: loading.contentLayoutGuide.trailingAnchor),
+            content.topAnchor.constraint(equalTo: loading.contentLayoutGuide.topAnchor),
+            content.bottomAnchor.constraint(equalTo: loading.contentLayoutGuide.bottomAnchor),
+            content.widthAnchor.constraint(equalTo: loading.frameLayoutGuide.widthAnchor),
+            content.heightAnchor.constraint(greaterThanOrEqualTo: loading.frameLayoutGuide.heightAnchor),
+            preferredHeight,
+            stack.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            stack.widthAnchor.constraint(equalTo: content.widthAnchor, multiplier: 0.82),
+            stack.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -24),
+            retryHeight
         ])
     }
 

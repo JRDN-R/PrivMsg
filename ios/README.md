@@ -58,6 +58,13 @@ at once and up to 4 GiB per file. The destination app may impose smaller limits.
 The app bundles its own copy of the PrivMsg interface, so installation does not
 depend on a website deployment. Firebase sign-in, messages and uploads still
 need internet access. The icon follows the supplied white visor/head concept.
+The same artwork is embedded in the native header, startup and error screens,
+and the bundled sign-in page. It displays without an external image request.
+
+To update an existing download, save and quit Xcode, then run the repository's
+`Update-PrivMsg.command` with your existing `ios` folder as its argument. The
+updater downloads a pinned complete revision, backs up the old source under
+`Local`, preserves your Xcode Team and bundle identifier, and runs the installer.
 
 ## Renew the development install
 

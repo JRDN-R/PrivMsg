@@ -36,7 +36,7 @@ def validate(app: Path, bundle_id: str = "com.jordanrapp.PrivMsg") -> None:
         raise ValueError("The main executable must be at the app bundle root")
     if not (app / executable).is_file() or (app / executable).stat().st_size == 0:
         raise ValueError(f"Missing or empty app executable: {executable}")
-    for name in ("index.html", "enhancements.js", "clipboard.js", "native-bridge.js"):
+    for name in ("index.html", "enhancements.js", "clipboard.js", "native-bridge.js", "app-icon.png"):
         if not (app / "WebContent" / name).is_file():
             raise ValueError(f"Missing bundled web content: WebContent/{name}")
 

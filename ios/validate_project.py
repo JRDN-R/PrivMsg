@@ -129,6 +129,11 @@ def validate(root=ROOT):
         if width == height == 1024:
             has_marketing_icon = True
     assert has_marketing_icon, "A 1024px app icon is required"
+    brand = app / "Assets.xcassets/BrandLogo.imageset"
+    brand_data = (brand / "BrandLogo.png").read_bytes()
+    assert brand_data[:8] == b"\x89PNG\r\n\x1a\n", "The embedded native logo is missing or invalid"
+    assert (app / "WebContent/app-icon.png").read_bytes() == brand_data, "The web and native logo assets must match"
+    assert json.loads((brand / "Contents.json").read_text())["images"][0]["filename"] == "BrandLogo.png"
     scheme = ET.parse(project / "xcshareddata" / "xcschemes" / "PrivMsg.xcscheme").getroot()
     refs = scheme.findall(".//BuildableReference")
     assert refs and all(ref.get("BlueprintIdentifier") == target_id for ref in refs), "Scheme targets do not match"

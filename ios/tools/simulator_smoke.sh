@@ -72,7 +72,7 @@ if ! xcrun simctl launch --terminate-running-process "$SIMULATOR_ID" "$BUNDLE_ID
   die 'PrivMsg failed to launch in the simulator.'
 fi
 # Give WKWebView and the bundled sign-in interface a brief first-launch window.
-sleep 8
+sleep 25
 mkdir -p "$(dirname "$SCREENSHOT_PATH")"
 xcrun simctl io "$SIMULATOR_ID" screenshot --type=png "$SCREENSHOT_PATH"
 python3 - "$SCREENSHOT_PATH" <<'PY'
