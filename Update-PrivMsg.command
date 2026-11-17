@@ -1,7 +1,7 @@
 #!/bin/bash
 # Update an existing PrivMsg Xcode download, preserving its signing identity.
 set -euo pipefail
-PRIVMSG_SOURCE_COMMIT="d0bf04c29b7da40e5dded55972380617c347351d"
+PRIVMSG_SOURCE_COMMIT="8c2320e4921bb5987a793376e8e678f70a7190b7"
 die() { printf '%s\n' "$*" >&2; exit 1; }
 [ "$(uname -s)" = Darwin ] || die 'Run this updater on your Mac.'
 [ "$#" -eq 1 ] || die 'Usage: bash Update-PrivMsg.command /path/to/PrivMsg/ios'
