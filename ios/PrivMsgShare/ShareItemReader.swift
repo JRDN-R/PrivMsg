@@ -110,7 +110,7 @@ final class ShareItemReader: @unchecked Sendable {
         }) { return binary }
         // A named text document still needs its original file identity. An
         // ordinary shared string has no suggested filename and stays text.
-        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) { return nil }
+        if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) { return nil }
         guard provider.suggestedName?.isEmpty == false else { return nil }
         return provider.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .text) == true }
     }
