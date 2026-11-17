@@ -13,6 +13,7 @@ private struct NativeSnapshot: Decodable {
 @MainActor
 final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
     private var webView: WKWebView!
+    private var nativePaste: NativeFilePaste?
     private var server: LocalWebServer?
     private var snapshot: NativeSnapshot?
     private var cachedSession: NativeSession?
@@ -23,7 +24,7 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
     private var timeout: Task<Void, Never>?
     private var downloads: [ObjectIdentifier: URL] = [:]
     private var activeDownloads: [ObjectIdentifier: WKDownload] = [:]
-    private lazy var filesButton = UIBarButtonItem(title: "Files", image: UIImage(systemName: "doc.on.doc"), target: self, action: #selector(openFiles))
+    private var preparingFiles = false
     private lazy var fileStore = AttachmentStore { [weak self] in
         guard let self else { throw AttachmentError.unauthorized }
         return try await self.nativeSession()
@@ -32,7 +33,6 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "PrivMsg"
-        installBrandedTitle()
         view.backgroundColor = UIColor(red: 0.067, green: 0.075, blue: 0.082, alpha: 1)
         let content = WKUserContentController()
         content.add(WeakMessageHandler(self), name: "privmsg")
@@ -43,6 +43,13 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        nativePaste = NativeFilePaste(webView: webView, context: { [weak self] in
+            guard let self, self.trusted(self.webView.url), let snapshot = self.snapshot,
+                  snapshot.signedIn, !snapshot.uid.isEmpty else { return nil }
+            return NativePasteContext(uid: snapshot.uid, threadID: snapshot.threadID)
+        }, reportError: { [weak self] message in
+            self?.showMessage("Could not paste files", message)
+        })
         webView.isOpaque = false
         webView.backgroundColor = view.backgroundColor
         webView.scrollView.backgroundColor = view.backgroundColor
@@ -54,58 +61,28 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
             webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-        filesButton.isEnabled = false
-        navigationItem.rightBarButtonItem = filesButton
-        navigationItem.leftBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"), menu: UIMenu(children: [
-            UIAction(title: "Reload", image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in self?.confirmReload() },
-            UIAction(title: "Clear downloaded copies", image: UIImage(systemName: "trash")) { [weak self] _ in
-                self?.fileStore.clear()
-                self?.clearWebDownloads()
-                self?.showMessage("Downloaded copies cleared", "Your saved messages and original files are unchanged.")
-            },
-            UIAction(title: "Sign out", image: UIImage(systemName: "rectangle.portrait.and.arrow.right")) { [weak self] _ in self?.confirmSignOut() }
-        ]))
         installLoadingView()
         clearWebDownloads()
         startApp()
     }
 
-    private func brandImageView(size: CGFloat) -> UIImageView {
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // The web interface owns the single main header and hamburger menu.
+        // The Files modal uses a separate navigation controller and its own bar.
+        navigationController?.setNavigationBarHidden(true, animated: false)
+    }
+
+    private func brandImageView() -> UIImageView {
         let image = UIImageView(image: UIImage(named: "BrandLogo"))
         image.contentMode = .scaleAspectFit
-        image.backgroundColor = .black
-        image.layer.cornerRadius = size * 0.2
-        image.clipsToBounds = true
         image.isAccessibilityElement = false
         image.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            image.widthAnchor.constraint(equalToConstant: size),
-            image.heightAnchor.constraint(equalToConstant: size)
+            image.widthAnchor.constraint(equalToConstant: 240),
+            image.heightAnchor.constraint(equalToConstant: 80)
         ])
         return image
-    }
-
-    private func installBrandedTitle() {
-        let name = UILabel()
-        name.text = "PrivMsg"
-        name.textColor = .label
-        name.font = UIFontMetrics(forTextStyle: .headline).scaledFont(
-            for: .systemFont(ofSize: 17, weight: .semibold), maximumPointSize: 23
-        )
-        name.adjustsFontForContentSizeCategory = true
-        name.adjustsFontSizeToFitWidth = true
-        name.minimumScaleFactor = 0.8
-        name.lineBreakMode = .byTruncatingTail
-        name.isAccessibilityElement = false
-        let brandedTitle = UIStackView(arrangedSubviews: [brandImageView(size: 30), name])
-        brandedTitle.axis = .horizontal
-        brandedTitle.alignment = .center
-        brandedTitle.spacing = 8
-        brandedTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        brandedTitle.isAccessibilityElement = true
-        brandedTitle.accessibilityLabel = "PrivMsg"
-        brandedTitle.accessibilityTraits = .header
-        navigationItem.titleView = brandedTitle
     }
 
     private func installLoadingView() {
@@ -129,7 +106,7 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
         retryButton.titleLabel?.adjustsFontForContentSizeCategory = true
         retryButton.isHidden = true
         retryButton.addTarget(self, action: #selector(retry), for: .touchUpInside)
-        stack.addArrangedSubview(brandImageView(size: 96))
+        stack.addArrangedSubview(brandImageView())
         stack.addArrangedSubview(loadingLabel)
         stack.addArrangedSubview(retryButton)
         view.addSubview(loading)
@@ -163,6 +140,7 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
     }
 
     private func startApp(reload: Bool = false) {
+        if reload { nativePaste?.cancel() }
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -180,7 +158,6 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
                     retryButton.isHidden = true
                     webView.isHidden = true
                     snapshot = nil
-                    filesButton.isEnabled = false
                     webView.load(URLRequest(url: server.baseURL))
                     timeout?.cancel()
                     timeout = Task { @MainActor [weak self] in
@@ -218,10 +195,20 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "privmsg", message.frameInfo.isMainFrame,
               trusted(message.frameInfo.request.url), trusted(webView.url),
-              JSONSerialization.isValidJSONObject(message.body),
-              let data = try? JSONSerialization.data(withJSONObject: message.body),
+              let body = message.body as? [String: Any],
+              let type = body["type"] as? String else { return }
+        if type == "action" {
+            guard let action = body["action"] as? String else { return }
+            handleNativeAction(action, payload: body)
+            return
+        }
+        guard type == "snapshot", JSONSerialization.isValidJSONObject(body),
+              let data = try? JSONSerialization.data(withJSONObject: body),
               let newSnapshot = try? JSONDecoder().decode(NativeSnapshot.self, from: data),
               newSnapshot.type == "snapshot" else { return }
+        if snapshot?.uid != newSnapshot.uid || snapshot?.threadID != newSnapshot.threadID || !newSnapshot.signedIn {
+            nativePaste?.cancel()
+        }
         if snapshot?.uid != newSnapshot.uid {
             cachedSession = nil
             sessionCachedAt = .distantPast
@@ -230,11 +217,30 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
             if presentedViewController != nil { dismiss(animated: false) }
         }
         snapshot = newSnapshot
-        filesButton.isEnabled = newSnapshot.signedIn
-        filesButton.title = newSnapshot.attachments.isEmpty ? "Files" : "Files (\(newSnapshot.attachments.count))"
         timeout?.cancel()
         loading.isHidden = true
         webView.isHidden = false
+    }
+
+    private func handleNativeAction(_ action: String, payload: [String: Any]) {
+        guard let snapshot, snapshot.signedIn, !snapshot.uid.isEmpty,
+              presentedViewController == nil, !preparingFiles else { return }
+        switch action {
+        case "pasteFiles":
+            nativePaste?.paste(fallbackText: payload["fallbackText"] as? String)
+        case "openFiles":
+            openFiles()
+        case "reload":
+            confirmReload()
+        case "clearDownloads":
+            fileStore.clear()
+            clearWebDownloads()
+            showMessage("Downloaded copies cleared", "Your saved messages and original files are unchanged.")
+        case "signOut":
+            confirmSignOut()
+        default:
+            return
+        }
     }
 
     private func nativeSession(forceRefresh: Bool = false) async throws -> NativeSession {
@@ -257,15 +263,18 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
         return session
     }
 
-    @objc private func openFiles() {
-        guard let snapshot, snapshot.signedIn, presentedViewController == nil else { return }
-        filesButton.isEnabled = false
+    private func openFiles() {
+        guard let snapshot, snapshot.signedIn, !preparingFiles,
+              presentedViewController == nil else { return }
+        preparingFiles = true
         Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.filesButton.isEnabled = self.snapshot?.signedIn == true }
+            defer { self.preparingFiles = false }
             do {
                 _ = try await self.nativeSession(forceRefresh: true)
-                guard self.snapshot?.uid == snapshot.uid, self.presentedViewController == nil else { return }
+                guard self.snapshot?.uid == snapshot.uid,
+                      self.snapshot?.threadID == snapshot.threadID,
+                      self.presentedViewController == nil else { return }
                 let files = AttachmentListViewController(attachments: snapshot.attachments, store: self.fileStore)
                 if snapshot.unavailable > 0 { files.navigationItem.prompt = "Some files have incomplete saved information." }
                 let navigation = UINavigationController(rootViewController: files)
@@ -381,7 +390,11 @@ final class PrivMsgViewController: UIViewController, WKNavigationDelegate, WKUID
         activeDownloads.removeValue(forKey: ObjectIdentifier(download))
         guard let url = downloads.removeValue(forKey: ObjectIdentifier(download)), presentedViewController == nil else { return }
         let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        share.popoverPresentationController?.barButtonItem = filesButton
+        if let popover = share.popoverPresentationController {
+            popover.sourceView = view
+            popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+            popover.permittedArrowDirections = []
+        }
         present(share, animated: true)
     }
 

@@ -12,7 +12,7 @@ import sys
 
 
 SOURCE_PATHS = (
-    "PrivMsg", "generate_project.py", "validate_project.py", "Install-PrivMsg.command",
+    "PrivMsg", "PrivMsgShare", "generate_project.py", "validate_project.py", "Install-PrivMsg.command",
     "tools", "tests", "vendor", "web-bundle.json", "README.md",
 )
 PROJECT = "PrivMsg.xcodeproj"

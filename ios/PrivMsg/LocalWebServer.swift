@@ -152,6 +152,7 @@ final class LocalWebServer {
             ("clipboard.js", "text/javascript; charset=utf-8", true),
             ("enhancements.js", "text/javascript; charset=utf-8", true),
             ("native-bridge.js", "text/javascript; charset=utf-8", true),
+            ("native-paste.js", "text/javascript; charset=utf-8", true),
             ("IMG_0630.webp", "image/webp", false),
             ("app-icon.png", "image/png", false),
             ("favicon.ico", "image/x-icon", false)

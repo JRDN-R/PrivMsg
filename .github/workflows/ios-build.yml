@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check web bridge
-        run: node --test tests/clipboard.test.mjs ios/tests/native-bridge.test.mjs
+        run: node --test tests/clipboard.test.mjs ios/tests/*.test.mjs
       - name: Generate and validate Xcode project
         run: |
           python3 ios/generate_project.py
@@ -29,6 +29,12 @@ jobs:
             ios/PrivMsg/LocalWebServer.swift ios/tests/local_web_server_smoke.swift \
             -o "$RUNNER_TEMP/privmsg-local-server-smoke"
           "$RUNNER_TEMP/privmsg-local-server-smoke"
+      - name: Check share upload schema
+        run: |
+          xcrun swiftc -swift-version 5 -parse-as-library \
+            ios/PrivMsgShare/ShareBackend.swift ios/tests/share_backend_smoke.swift \
+            -o "$RUNNER_TEMP/privmsg-share-backend-smoke"
+          "$RUNNER_TEMP/privmsg-share-backend-smoke"
       - name: Compile for iOS Simulator
         run: |
           set -o pipefail

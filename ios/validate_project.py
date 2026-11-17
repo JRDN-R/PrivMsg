@@ -78,9 +78,12 @@ def validate(root=ROOT):
 
     check_references(objects)
     targets = [(ident, obj) for ident, obj in objects.items() if obj["isa"] == "PBXNativeTarget"]
-    assert len(targets) == 1, "Expected one Personal Team compatible app target"
-    target_id, target = targets[0]
-    assert target["productType"] == "com.apple.product-type.application"
+    hosts = [(ident, obj) for ident, obj in targets if obj["productType"] == "com.apple.product-type.application"]
+    shares = [(ident, obj) for ident, obj in targets if obj["productType"] == "com.apple.product-type.app-extension"]
+    assert len(hosts) == 1, "Expected one containing app target"
+    assert len(shares) == int((root / "PrivMsgShare").is_dir()), "Missing or unexpected Share extension target"
+    assert len(targets) == len(hosts) + len(shares), "Unexpected native target"
+    target_id, target = hosts[0]
     configs = objects[target["buildConfigurationList"]]["buildConfigurations"]
     bundles, teams = set(), set()
     for ident in configs:
@@ -94,13 +97,21 @@ def validate(root=ROOT):
     assert all(not team or re.fullmatch(r"[A-Z0-9]{10}", team) for team in teams)
 
     app = root / "PrivMsg"
-    actual_swift = {p.relative_to(app).as_posix() for p in app.rglob("*.swift")}
-    referenced_swift = {obj["path"] for obj in objects.values() if obj["isa"] == "PBXFileReference" and obj.get("lastKnownFileType") == "sourcecode.swift"}
-    assert actual_swift and actual_swift == referenced_swift, "Missing or stale Swift file references; rerun generator"
+    def check_sources(native_target, folder):
+        actual = {p.relative_to(root / folder).as_posix() for p in (root / folder).rglob("*.swift")}
+        groups = [obj for obj in objects.values() if obj["isa"] == "PBXGroup" and obj.get("path") == folder]
+        assert len(groups) == 1, f"Missing source group for {folder}"
+        refs = {ident for ident in groups[0]["children"]
+                if objects[ident].get("lastKnownFileType") == "sourcecode.swift"}
+        phase = next(objects[ident] for ident in native_target["buildPhases"] if objects[ident]["isa"] == "PBXSourcesBuildPhase")
+        compiled = {objects[ident]["fileRef"] for ident in phase["files"]}
+        assert compiled == refs, f"Wrong sources compiled in {folder} target"
+        assert actual and {objects[ident]["path"] for ident in refs} == actual, f"Missing or stale {folder} source references"
+        return actual
+
+    actual_swift = check_sources(target, "PrivMsg")
+    referenced_swift = actual_swift
     phase_ids = target["buildPhases"]
-    source_phase = next(objects[ident] for ident in phase_ids if objects[ident]["isa"] == "PBXSourcesBuildPhase")
-    compiled_swift = {objects[objects[ident]["fileRef"]]["path"] for ident in source_phase["files"]}
-    assert compiled_swift == actual_swift, "Not all Swift files are compiled"
     resource_phase = next(objects[ident] for ident in phase_ids if objects[ident]["isa"] == "PBXResourcesBuildPhase")
     copied_resources = {objects[objects[ident]["fileRef"]]["path"] for ident in resource_phase["files"]}
     assert "Assets.xcassets" in copied_resources, "App icons are not in the resource phase"
@@ -115,6 +126,34 @@ def validate(root=ROOT):
         info = plistlib.load(handle)
     assert info.get("CFBundleIdentifier") == "$(PRODUCT_BUNDLE_IDENTIFIER)", "Info.plist must inherit the selected bundle ID"
     assert info.get("CFBundleExecutable") == "$(EXECUTABLE_NAME)", "Info.plist must identify the built executable"
+    share_swift = set()
+    if shares:
+        share_id, share = shares[0]
+        share_swift = check_sources(share, "PrivMsgShare")
+        share_configs = objects[share["buildConfigurationList"]]["buildConfigurations"]
+        for ident in share_configs:
+            settings = objects[ident]["buildSettings"]
+            assert settings["PRODUCT_BUNDLE_IDENTIFIER"] == next(iter(bundles)) + ".Share", "Share bundle ID must derive from the host app"
+            assert settings.get("DEVELOPMENT_TEAM", "") == next(iter(teams)), "App and Share extension must use the same Team"
+            assert settings["CODE_SIGN_STYLE"] == "Automatic"
+            assert "CODE_SIGN_ENTITLEMENTS" not in settings, "Share extension must not require paid/shared capabilities"
+            assert settings["APPLICATION_EXTENSION_API_ONLY"] == settings["SKIP_INSTALL"] == "YES"
+            assert settings["INFOPLIST_FILE"] == "PrivMsgShare/Info.plist"
+        dependencies = [objects[ident] for ident in target["dependencies"]]
+        assert any(obj.get("target") == share_id for obj in dependencies), "Host must build the Share extension dependency"
+        embeds = [objects[ident] for ident in phase_ids if objects[ident]["isa"] == "PBXCopyFilesBuildPhase"]
+        assert len(embeds) == 1 and str(embeds[0]["dstSubfolderSpec"]) == "13", "Share extension must be embedded in PlugIns"
+        embedded = [objects[ident] for ident in embeds[0]["files"]]
+        assert len(embedded) == 1 and embedded[0]["fileRef"] == share["productReference"]
+        assert "CodeSignOnCopy" in embedded[0].get("settings", {}).get("ATTRIBUTES", []), "Embedded Share extension must be signed"
+        with (root / "PrivMsgShare/Info.plist").open("rb") as handle:
+            share_info = plistlib.load(handle)
+        assert share_info.get("CFBundleIdentifier") == "$(PRODUCT_BUNDLE_IDENTIFIER)"
+        assert share_info.get("CFBundleExecutable") == "$(EXECUTABLE_NAME)"
+        extension = share_info.get("NSExtension", {})
+        assert extension.get("NSExtensionPointIdentifier") == "com.apple.share-services", "Invalid Share extension point"
+        assert extension.get("NSExtensionPrincipalClass") == "$(PRODUCT_MODULE_NAME).ShareViewController"
+        assert extension.get("NSExtensionAttributes", {}).get("NSExtensionActivationRule"), "Share extension needs activation types"
     icon_set = app / "Assets.xcassets" / "AppIcon.appiconset"
     icons = json.loads((icon_set / "Contents.json").read_text())["images"]
     has_marketing_icon = False
@@ -138,7 +177,7 @@ def validate(root=ROOT):
     refs = scheme.findall(".//BuildableReference")
     assert refs and all(ref.get("BlueprintIdentifier") == target_id for ref in refs), "Scheme targets do not match"
     ET.parse(project / "project.xcworkspace" / "contents.xcworkspacedata")
-    print(f"Verified {len(actual_swift)} Swift files, app resources, icon, signing, project references and shared scheme.")
+    print(f"Verified {len(actual_swift)} app and {len(share_swift)} Share Swift files, resources, signing, embedding and scheme.")
     print("Swift compilation and device installation still require Xcode on macOS.")
 
 

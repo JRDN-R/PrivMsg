@@ -137,6 +137,7 @@ function buildInterface() {
       </section>
     </div>`;
   document.body.append(backdrop, drawer);
+  window.dispatchEvent(new Event("privmsg:drawer"));
 
   const close = () => {
     backdrop.classList.remove("open");

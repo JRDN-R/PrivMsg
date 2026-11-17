@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import plistlib
+import shutil
 import tempfile
 import unittest
 
@@ -16,7 +17,7 @@ class BuiltAppTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.app = Path(self.temp.name) / "PrivMsg.app"
         (self.app / "WebContent").mkdir(parents=True)
-        for name in ("index.html", "enhancements.js", "clipboard.js", "native-bridge.js", "app-icon.png"):
+        for name in ("index.html", "enhancements.js", "clipboard.js", "native-bridge.js", "native-paste.js", "app-icon.png"):
             (self.app / "WebContent" / name).write_text("fixture")
         (self.app / "PrivMsg").write_bytes(b"simulated executable")
         self.info = dict(CFBundleIdentifier="com.jordanrapp.PrivMsg",
@@ -24,9 +25,20 @@ class BuiltAppTests(unittest.TestCase):
                          CFBundleVersion="1", CFBundleShortVersionString="1.0",
                          CFBundleSupportedPlatforms=["iPhoneSimulator"])
         self.write_info()
+        self.extension = self.app / "PlugIns/PrivMsgShare.appex"
+        self.extension.mkdir(parents=True)
+        (self.extension / "PrivMsgShare").write_bytes(b"simulated extension executable")
+        self.share_info = dict(self.info, CFBundleIdentifier="com.jordanrapp.PrivMsg.Share",
+                               CFBundleExecutable="PrivMsgShare", CFBundlePackageType="XPC!",
+                               NSExtension={"NSExtensionPointIdentifier": "com.apple.share-services",
+                                            "NSExtensionPrincipalClass": "PrivMsgShare.ShareViewController"})
+        self.write_share_info()
 
     def write_info(self):
         (self.app / "Info.plist").write_bytes(plistlib.dumps(self.info, fmt=plistlib.FMT_BINARY))
+
+    def write_share_info(self):
+        (self.extension / "Info.plist").write_bytes(plistlib.dumps(self.share_info, fmt=plistlib.FMT_BINARY))
 
     def test_valid_flat_bundle(self):
         MODULE.validate(self.app)
@@ -49,8 +61,29 @@ class BuiltAppTests(unittest.TestCase):
             MODULE.validate(self.app)
 
     def test_missing_web_content_is_rejected(self):
-        (self.app / "WebContent" / "native-bridge.js").unlink()
-        with self.assertRaisesRegex(ValueError, "Missing bundled web content"):
+        for name in ("native-bridge.js", "native-paste.js"):
+            with self.subTest(name=name):
+                path = self.app / "WebContent" / name
+                path.unlink()
+                with self.assertRaisesRegex(ValueError, "Missing bundled web content"):
+                    MODULE.validate(self.app)
+                path.write_text("fixture")
+
+    def test_missing_embedded_share_is_rejected(self):
+        shutil.rmtree(self.extension)
+        with self.assertRaisesRegex(ValueError, "Missing embedded Share extension"):
+            MODULE.validate(self.app)
+
+    def test_share_identity_must_match_host(self):
+        self.share_info["CFBundleIdentifier"] = "com.jordanrapp.Other.Share"
+        self.write_share_info()
+        with self.assertRaisesRegex(ValueError, "identifier must match"):
+            MODULE.validate(self.app)
+
+    def test_share_version_must_match_host(self):
+        self.share_info["CFBundleVersion"] = "2"
+        self.write_share_info()
+        with self.assertRaisesRegex(ValueError, "versions differ"):
             MODULE.validate(self.app)
 
 

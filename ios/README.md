@@ -1,8 +1,9 @@
 # PrivMsg for iPhone
 
-PrivMsg keeps its existing conversations and file uploads, with a native iOS
-Files screen for dragging actual files into another app. It supports iOS 17 and
-later on iPhone and iPad. This is source code for an Xcode development install.
+PrivMsg keeps its existing conversations and file uploads, with native clipboard
+file intake, an iOS share extension, and a Files screen for dragging actual files
+into another app. It supports iOS 17 and later on iPhone and iPad. This is source
+code for an Xcode development install.
 
 ## Install from the package
 
@@ -33,7 +34,8 @@ Apple signing may need internet access.
 
 If no signing team is available, the script opens Xcode. Select the blue PrivMsg
 project, then the PrivMsg target, and choose your Personal Team under Signing &
-Capabilities. Save with Command-S and return to Terminal. You can also select
+Capabilities. Select the same team for PrivMsgShare if Xcode requests it. Save
+with Command-S and return to Terminal. You can also select
 your iPhone in Xcode and press Run. Apple account login, device trust and
 Developer Mode require your own interaction.
 
@@ -42,7 +44,7 @@ into the app. Conversations and uploads use the same existing PrivMsg account.
 
 ## Drag files to ChatGPT or another app
 
-Open the native Files screen in PrivMsg. Hold a file until it lifts, keep holding,
+Open the hamburger menu, then Files in PrivMsg. Hold a file until it lifts, keep holding,
 and tap other file rows with another finger to add them to the drag. Swipe Home
 or use the app switcher while continuing to hold, then drop into a destination
 that accepts files. Large uncached files need network access and preparation;
@@ -57,9 +59,40 @@ at once and up to 4 GiB per file. The destination app may impose smaller limits.
 
 The app bundles its own copy of the PrivMsg interface, so installation does not
 depend on a website deployment. Firebase sign-in, messages and uploads still
-need internet access. The icon follows the supplied white visor/head concept.
-The same artwork is embedded in the native header, startup and error screens,
-and the bundled sign-in page. It displays without an external image request.
+need internet access. The home-screen icon follows the supplied white visor/head
+concept. The exact Vagaries wordmark is bundled for the single web header,
+sign-in, and native loading/error states. The app has no second native header or
+top corner buttons. Branding displays without an external image request.
+
+## Paste files into a conversation
+
+Copy files in another app, then use Paste in the message field or the composer's
+plus menu. Native clipboard intake reads original file representations exposed
+by that app and stages attachments for the normal Send action. Ordinary text
+and web links remain text. A link copied by another app cannot supply the file's
+bytes; use that app's Share action for the actual document instead.
+
+Clipboard intake accepts up to 20 files and 100 MiB in one batch. It uses
+temporary files and transfers data into the web composer in bounded chunks.
+Changing accounts or conversations cancels an in-progress paste. Clipboard
+access occurs only after your Paste action, never by background polling.
+
+## Send from the iOS share sheet
+
+In ChatGPT, Files, Photos, or another app, share the actual file and choose
+PrivMsg. If it is not visible initially, open More in the share sheet and enable
+PrivMsg. Review the filenames, add an optional message, and tap Send. Keep the
+share sheet open until it reports completion. Web links are sent as links.
+
+Sign in to PrivMsg once inside the share sheet. The extension has its own secure
+sign-in and does not copy the containing app's web session. It remembers only a
+refresh token in its own Keychain, not your password. Uploads go directly to the
+existing backend and today's conversation, so you do not need to open PrivMsg
+first. A failed transfer can be retried without publishing a duplicate message.
+
+The extension is embedded as PrivMsgShare.appex with the same signing team and
+the app's bundle identifier plus .Share. It needs no App Group or shared
+Keychain entitlement.
 
 To update an existing download, save and quit Xcode, then run the repository's
 `Update-PrivMsg.command` with your existing `ios` folder as its argument. The

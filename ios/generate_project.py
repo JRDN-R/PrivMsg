@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_BUNDLE = "com.jordanrapp.PrivMsg"
@@ -47,11 +48,19 @@ def current_signing(root=ROOT):
         saved = json.loads(settings.read_text())
     project = root / "PrivMsg.xcodeproj" / "project.pbxproj"
     if project.exists():
-        text = project.read_text()
+        # Extension bundle IDs intentionally differ from the containing app.
+        # Adopt only the host target's selections, not every setting in the file.
+        parse = runpy.run_path(str(Path(__file__).with_name("validate_project.py")))["parse_project"]
+        tree = parse(project.read_text())
+        objects = tree["objects"]
+        hosts = [obj for obj in objects.values() if obj.get("isa") == "PBXNativeTarget"
+                 and obj.get("productType") == "com.apple.product-type.application"]
+        if len(hosts) != 1:
+            raise ValueError("Expected one PrivMsg application target when reading signing choices.")
+        config_ids = objects[hosts[0]["buildConfigurationList"]]["buildConfigurations"]
         choices = {}
         for setting, key in [("DEVELOPMENT_TEAM", "team"), ("PRODUCT_BUNDLE_IDENTIFIER", "bundle")]:
-            pattern = rf'"?{setting}"?\s*=\s*(?:"([^"\n]*)"|([^;\s]+))\s*;'
-            values = {quoted or bare for quoted, bare in re.findall(pattern, text)}
+            values = {objects[ident]["buildSettings"].get(setting, "") for ident in config_ids}
             values.discard("")
             if len(values) == 1:
                 choices[key] = next(iter(values))
@@ -66,7 +75,7 @@ def current_signing(root=ROOT):
     return saved
 
 
-def project_objects(source_names, team, bundle, has_resources):
+def project_objects(source_names, team, bundle, has_resources, share_sources=None):
     objects = {}
 
     def add(object_name, **values):
@@ -124,7 +133,43 @@ def project_objects(source_names, team, bundle, has_resources):
     target_config_list = add("target-config-list", isa="XCConfigurationList", buildConfigurations=target_configs, defaultConfigurationIsVisible=0, defaultConfigurationName="Release")
     target = add("target", isa="PBXNativeTarget", buildConfigurationList=target_config_list, buildPhases=[sources, frameworks, resources], buildRules=[], dependencies=[], name="PrivMsg", productName="PrivMsg", productReference=product, productType="com.apple.product-type.application")
     attributes = {"LastUpgradeCheck": "1600", "TargetAttributes": {target: {"CreatedOnToolsVersion": "16.0", "ProvisioningStyle": "Automatic"}}}
-    project = add("project", isa="PBXProject", attributes=attributes, buildConfigurationList=project_config_list, compatibilityVersion="Xcode 14.0", developmentRegion="en", hasScannedForEncodings=0, knownRegions=["en", "Base"], mainGroup=main_group, productRefGroup=products_group, projectDirPath="", projectRoot="", targets=[target])
+    targets = [target]
+    if share_sources is not None:
+        share_refs, share_builds = [], []
+        for name in share_sources:
+            ref = add("share-source:" + name, isa="PBXFileReference", lastKnownFileType="sourcecode.swift", path=name, sourceTree="<group>")
+            share_refs.append(ref)
+            share_builds.append(add("share-build:" + name, isa="PBXBuildFile", fileRef=ref))
+        share_plist = add("share-info", isa="PBXFileReference", lastKnownFileType="text.plist.xml", path="Info.plist", sourceTree="<group>")
+        share_group = add("share-group", isa="PBXGroup", children=share_refs + [share_plist], path="PrivMsgShare", sourceTree="<group>")
+        objects[main_group]["children"].insert(1, share_group)
+        share_product = add("share-product", isa="PBXFileReference", explicitFileType="wrapper.app-extension", includeInIndex=0, path="PrivMsgShare.appex", sourceTree="BUILT_PRODUCTS_DIR")
+        objects[products_group]["children"].append(share_product)
+        share_sources_phase = add("share-sources-phase", isa="PBXSourcesBuildPhase", buildActionMask=2147483647, files=share_builds, runOnlyForDeploymentPostprocessing=0)
+        share_frameworks = add("share-frameworks-phase", isa="PBXFrameworksBuildPhase", buildActionMask=2147483647, files=[], runOnlyForDeploymentPostprocessing=0)
+        share_resources = add("share-resources-phase", isa="PBXResourcesBuildPhase", buildActionMask=2147483647, files=[], runOnlyForDeploymentPostprocessing=0)
+        share_configs = []
+        for name in ["Debug", "Release"]:
+            settings = dict(objects[object_id("target-config:" + name)]["buildSettings"])
+            settings.pop("ASSETCATALOG_COMPILER_APPICON_NAME", None)
+            settings.update({
+                "INFOPLIST_FILE": "PrivMsgShare/Info.plist",
+                "PRODUCT_BUNDLE_IDENTIFIER": bundle + ".Share",
+                "APPLICATION_EXTENSION_API_ONLY": "YES", "SKIP_INSTALL": "YES",
+                "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"],
+            })
+            share_configs.append(add("share-config:" + name, isa="XCBuildConfiguration", buildSettings=settings, name=name))
+        share_config_list = add("share-config-list", isa="XCConfigurationList", buildConfigurations=share_configs, defaultConfigurationIsVisible=0, defaultConfigurationName="Release")
+        share_target = add("share-target", isa="PBXNativeTarget", buildConfigurationList=share_config_list, buildPhases=[share_sources_phase, share_frameworks, share_resources], buildRules=[], dependencies=[], name="PrivMsgShare", productName="PrivMsgShare", productReference=share_product, productType="com.apple.product-type.app-extension")
+        proxy = add("share-proxy", isa="PBXContainerItemProxy", containerPortal=object_id("project"), proxyType=1, remoteGlobalIDString=share_target, remoteInfo="PrivMsgShare")
+        dependency = add("share-dependency", isa="PBXTargetDependency", target=share_target, targetProxy=proxy)
+        embed_file = add("embed-share-file", isa="PBXBuildFile", fileRef=share_product, settings={"ATTRIBUTES": ["CodeSignOnCopy", "RemoveHeadersOnCopy"]})
+        embed_phase = add("embed-share-phase", isa="PBXCopyFilesBuildPhase", buildActionMask=2147483647, dstPath="", dstSubfolderSpec=13, files=[embed_file], name="Embed App Extensions", runOnlyForDeploymentPostprocessing=0)
+        objects[target]["dependencies"].append(dependency)
+        objects[target]["buildPhases"].append(embed_phase)
+        attributes["TargetAttributes"][share_target] = {"CreatedOnToolsVersion": "16.0", "ProvisioningStyle": "Automatic"}
+        targets.append(share_target)
+    project = add("project", isa="PBXProject", attributes=attributes, buildConfigurationList=project_config_list, compatibilityVersion="Xcode 14.0", developmentRegion="en", hasScannedForEncodings=0, knownRegions=["en", "Base"], mainGroup=main_group, productRefGroup=products_group, projectDirPath="", projectRoot="", targets=targets)
     return {"archiveVersion": 1, "classes": {}, "objectVersion": 56, "objects": objects, "rootObject": project}
 
 
@@ -145,7 +190,13 @@ def generate(team=None, bundle=None, root=ROOT):
     for required in [app / "Info.plist", app / "Assets.xcassets"]:
         if not required.exists():
             raise ValueError(f"Missing required app resource: {required}")
-    tree = project_objects(sources, team, bundle, (app / "WebContent").is_dir())
+    share = root / "PrivMsgShare"
+    share_sources = None
+    if share.exists():
+        share_sources = sorted(p.relative_to(share).as_posix() for p in share.rglob("*.swift"))
+        if not share_sources or not (share / "Info.plist").is_file():
+            raise ValueError("The PrivMsgShare extension is incomplete. Extract the complete package.")
+    tree = project_objects(sources, team, bundle, (app / "WebContent").is_dir(), share_sources)
     project = root / "PrivMsg.xcodeproj"
     project.mkdir(exist_ok=True)
     write_if_changed(project / "project.pbxproj", "// !$*UTF8*$!\n" + serialize(tree) + "\n")
@@ -183,7 +234,7 @@ def main():
     except (ValueError, OSError, json.JSONDecodeError) as error:
         parser.exit(1, f"Could not generate PrivMsg: {error}\n")
     print(f"Generated {project}")
-    print("Personal Team compatible: one app target, no paid capabilities.")
+    print("Automatic signing with no App Groups or shared-keychain capability.")
 
 
 if __name__ == "__main__":

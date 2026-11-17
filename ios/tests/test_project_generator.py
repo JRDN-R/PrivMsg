@@ -82,6 +82,54 @@ class SigningIdentityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot contain a Resources folder"):
             generator.generate(root=self.root)
 
+    def add_share(self):
+        share = self.root / "PrivMsgShare"
+        share.mkdir()
+        (share / "ShareViewController.swift").write_text("import UIKit\n")
+        (share / "Info.plist").write_text("fixture")
+
+    def test_share_identifier_does_not_conflict_with_host_signing(self):
+        self.add_share()
+        identity = self.save_identity()
+        generator.generate(root=self.root)
+        self.assertEqual(generator.current_signing(self.root), identity)
+        _, tree = generator.generate(root=self.root)
+        objects = tree["objects"]
+        app = objects[generator.object_id("target")]
+        share = objects[generator.object_id("share-target")]
+        self.assertEqual(objects[app["dependencies"][0]]["target"], generator.object_id("share-target"))
+        for config in objects[share["buildConfigurationList"]]["buildConfigurations"]:
+            settings = objects[config]["buildSettings"]
+            self.assertEqual(settings["DEVELOPMENT_TEAM"], identity["team"])
+            self.assertEqual(settings["PRODUCT_BUNDLE_IDENTIFIER"], identity["bundle"] + ".Share")
+            self.assertEqual(settings["APPLICATION_EXTENSION_API_ONLY"], "YES")
+            self.assertNotIn("CODE_SIGN_ENTITLEMENTS", settings)
+        embed = objects[generator.object_id("embed-share-phase")]
+        self.assertEqual(embed["dstSubfolderSpec"], 13)
+        self.assertEqual(objects[objects[embed["files"][0]]["fileRef"]]["path"], "PrivMsgShare.appex")
+
+    def test_host_xcode_choice_wins_when_extension_has_stale_team(self):
+        self.add_share()
+        self.save_identity()
+        _, tree = generator.generate(root=self.root)
+        objects = tree["objects"]
+        host = objects[generator.object_id("target")]
+        for config in objects[host["buildConfigurationList"]]["buildConfigurations"]:
+            objects[config]["buildSettings"]["DEVELOPMENT_TEAM"] = "ZYXWV98765"
+            objects[config]["buildSettings"]["PRODUCT_BUNDLE_IDENTIFIER"] = "com.jordanrapp.ManualHost"
+        (self.root / "PrivMsg.xcodeproj/project.pbxproj").write_text(generator.serialize(tree))
+        self.assertEqual(generator.current_signing(self.root), {"team": "ZYXWV98765", "bundle": "com.jordanrapp.ManualHost"})
+        _, updated = generator.generate(root=self.root)
+        self.assertEqual(updated["objects"][generator.object_id("share-config:Debug")]["buildSettings"]["DEVELOPMENT_TEAM"], "ZYXWV98765")
+
+    def test_mismatched_host_debug_release_still_rejected(self):
+        self.add_share()
+        _, tree = generator.generate(root=self.root)
+        tree["objects"][generator.object_id("target-config:Debug")]["buildSettings"]["PRODUCT_BUNDLE_IDENTIFIER"] = "com.jordanrapp.Other"
+        (self.root / "PrivMsg.xcodeproj/project.pbxproj").write_text(generator.serialize(tree))
+        with self.assertRaisesRegex(ValueError, "Different PRODUCT_BUNDLE_IDENTIFIER"):
+            generator.current_signing(self.root)
+
 
 if __name__ == "__main__":
     unittest.main()

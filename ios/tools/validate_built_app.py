@@ -36,9 +36,32 @@ def validate(app: Path, bundle_id: str = "com.jordanrapp.PrivMsg") -> None:
         raise ValueError("The main executable must be at the app bundle root")
     if not (app / executable).is_file() or (app / executable).stat().st_size == 0:
         raise ValueError(f"Missing or empty app executable: {executable}")
-    for name in ("index.html", "enhancements.js", "clipboard.js", "native-bridge.js", "app-icon.png"):
+    for name in ("index.html", "enhancements.js", "clipboard.js", "native-bridge.js", "native-paste.js", "app-icon.png"):
         if not (app / "WebContent" / name).is_file():
             raise ValueError(f"Missing bundled web content: WebContent/{name}")
+    extension = app / "PlugIns/PrivMsgShare.appex"
+    if not extension.is_dir() or extension.is_symlink():
+        raise ValueError("Missing embedded Share extension: PlugIns/PrivMsgShare.appex")
+    with (extension / "Info.plist").open("rb") as handle:
+        share = plistlib.load(handle)
+    if share.get("CFBundleIdentifier") != bundle_id + ".Share":
+        raise ValueError("Share extension identifier must match its containing app")
+    if share.get("CFBundlePackageType") != "XPC!" or share.get("CFBundleSupportedPlatforms") != ["iPhoneSimulator"]:
+        raise ValueError("Expected an iPhone Simulator app extension bundle")
+    for key in ("CFBundleVersion", "CFBundleShortVersionString"):
+        if share.get(key) != info[key]:
+            raise ValueError(f"Host and Share extension versions differ: {key}")
+    share_executable = share.get("CFBundleExecutable", "")
+    if not share_executable or Path(share_executable).name != share_executable or share_executable in (".", ".."):
+        raise ValueError("Invalid Share extension executable")
+    if not (extension / share_executable).is_file() or not (extension / share_executable).stat().st_size:
+        raise ValueError("Missing Share extension executable")
+    extension_info = share.get("NSExtension", {})
+    if extension_info.get("NSExtensionPointIdentifier") != "com.apple.share-services":
+        raise ValueError("Invalid embedded Share extension point")
+    principal = extension_info.get("NSExtensionPrincipalClass", "")
+    if not principal.endswith(".ShareViewController") or "$(" in principal:
+        raise ValueError("Unresolved Share extension principal class")
 
 
 def main() -> int:

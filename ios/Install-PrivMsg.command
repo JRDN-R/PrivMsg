@@ -129,13 +129,14 @@ One-time signing setup:
 2. Select the blue PrivMsg project, then the PrivMsg target.
 3. Open Signing & Capabilities, leave automatic signing enabled, and choose
    your Personal Team. Keep the bundle identifier unless Xcode reports a clash.
+   The installer applies this same Team to the PrivMsgShare extension.
 4. Save the project (Command-S), then return to this Terminal window.
 
 SIGNING
   if [ -t 0 ]; then
     printf 'After choosing your Team in Xcode, press Return here: '
     IFS= read -r PRIVMSG_CONTINUE
-    # Adopt the saved Xcode choices without rewriting the open project.
+    # Adopt the host app's saved choices and propagate them to its extension.
     "$PYTHON" - "$SCRIPT_DIR" <<'PY'
 import importlib.util, json, os, pathlib, sys
 root = pathlib.Path(sys.argv[1])
@@ -146,6 +147,7 @@ values = module.current_signing(root)
 temporary = root / "Local" / "Signing.json.tmp"
 temporary.write_text(json.dumps(values, indent=2) + "\n")
 os.replace(temporary, root / "Local" / "Signing.json")
+module.generate(team=values.get("team", ""), bundle=values.get("bundle", module.DEFAULT_BUNDLE), root=root)
 PY
     "$PYTHON" "$SCRIPT_DIR/validate_project.py"
     PRIVMSG_TEAM="$(saved_value team)"

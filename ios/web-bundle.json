@@ -2,10 +2,11 @@
   "webBaseCommit": "beafc9bd5bf2f49214cca0a1195632035ce70c45",
   "snapshotFromCommit": "d8f27753123060f777b0827d99bd5383158ec3dc",
   "files": {
-    "index.html": "91a80fc28ce47d4f5fe6a4f51119f7e52690efc8e67d889cdec1509fc2620c0d",
-    "enhancements.js": "b21c3096a08f807a7982df9f1435e3b0594ae15b6bcac6fd4aafb549eda07e7d",
+    "index.html": "ad3237aac1fdb208210e6ccb01339c43f08099c4e3c613b6d6e6cc18a2363802",
+    "enhancements.js": "a684db812e3fff5ed863353267f0d7ddd8c3800146a60bf332d3ea76eb13c961",
     "clipboard.js": "6b8f0dcb738ff0d3885098d6685db04980f741e767358171f361cd2c5df6ffc6",
-    "native-bridge.js": "31c5cce8d24f17abfeffebbb42c65060ecaac7bf1d94e9e4b6712da33a9ed2b8",
-    "app-icon.png": "d8eb5247584e33991e0938b433c5ac07e3828cf4a669a7b310618247ca523161"
+    "native-bridge.js": "f1ff364068ed489ae7208265241ac6389690c6abc72e229684288e5d92d3af0a",
+    "native-paste.js": "07dd6e39d8cc4075ca1ac3d7fbaa4f572b60613db14e0698dc5a4528d1013722",
+    "app-icon.png": "4d05addb1a9b40b990ba3e567098c370f9968cb59ab888ff66f34501d0a4e254"
   }
 }

@@ -24,7 +24,7 @@ struct LocalWebServerSmoke {
         defer { try? FileManager.default.removeItem(at: directory) }
         let expected = Data("<!doctype html><title>PrivMsg server smoke</title>".utf8)
         try expected.write(to: directory.appendingPathComponent("index.html"))
-        for name in ["clipboard.js", "enhancements.js", "native-bridge.js"] {
+        for name in ["clipboard.js", "enhancements.js", "native-bridge.js", "native-paste.js"] {
             try Data("// smoke fixture\n".utf8).write(to: directory.appendingPathComponent(name))
         }
         // Even another real file in the same directory must remain inaccessible.

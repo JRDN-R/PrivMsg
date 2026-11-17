@@ -6,6 +6,9 @@ set -euo pipefail
 [ "$(uname -s)" = Darwin ] || { printf '%s\n' 'This check requires macOS codesign.' >&2; exit 1; }
 PRIVMSG_TOOLS="$(cd "$(dirname "$0")" && pwd)"
 python3 "$PRIVMSG_TOOLS/validate_built_app.py" "$1"
+# Sign nested extension first, then seal it into the containing app signature.
+/usr/bin/codesign --force --sign - --timestamp=none "$1/PlugIns/PrivMsgShare.appex"
+/usr/bin/codesign --verify --strict --verbose=2 "$1/PlugIns/PrivMsgShare.appex"
 /usr/bin/codesign --force --sign - --timestamp=none "$1"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$1"
 printf '%s\n' 'Simulator app passed ad hoc signing and strict signature verification.'
