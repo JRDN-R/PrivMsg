@@ -3,7 +3,7 @@
 # Apple's Xcode tools to build, sign, install and launch the app on your iPhone.
 set -euo pipefail
 
-PRIVMSG_SOURCE_COMMIT="0565aa07cc897fc460ff6d9ec79f1fe96256ddab"
+PRIVMSG_SOURCE_COMMIT="f82df9248f31feb9b5ac8a3852e276b7d90bbc51"
 PRIVMSG_INSTALL_ROOT="${PRIVMSG_INSTALL_ROOT:-$HOME/Developer/PrivMsg-iOS}"
 PRIVMSG_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
