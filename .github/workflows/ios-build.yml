@@ -4,10 +4,6 @@ on:
     paths:
       - 'ios/**'
       - '.github/workflows/ios-build.yml'
-  pull_request:
-    paths:
-      - 'ios/**'
-      - '.github/workflows/ios-build.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,3 +27,16 @@ jobs:
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/PrivMsgDerivedData" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+      - name: Launch on iPhone Simulator
+        run: |
+          bash ios/tools/simulator_smoke.sh \
+            "$RUNNER_TEMP/PrivMsgDerivedData/Build/Products/Debug-iphonesimulator/PrivMsg.app" \
+            "$RUNNER_TEMP/privmsg-smoke.png"
+      - name: Save launch screenshot for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: privmsg-launch
+          path: ${{ runner.temp }}/privmsg-smoke.png
+          if-no-files-found: ignore
+          retention-days: 3

@@ -48,14 +48,21 @@ def current_signing(root=ROOT):
     project = root / "PrivMsg.xcodeproj" / "project.pbxproj"
     if project.exists():
         text = project.read_text()
+        choices = {}
         for setting, key in [("DEVELOPMENT_TEAM", "team"), ("PRODUCT_BUNDLE_IDENTIFIER", "bundle")]:
             pattern = rf'"?{setting}"?\s*=\s*(?:"([^"\n]*)"|([^;\s]+))\s*;'
             values = {quoted or bare for quoted, bare in re.findall(pattern, text)}
             values.discard("")
             if len(values) == 1:
-                saved[key] = next(iter(values))
+                choices[key] = next(iter(values))
             elif len(values) > 1:
                 raise ValueError(f"Different {setting} values are selected in Xcode. Use the same value for Debug and Release.")
+        # A new release ships an unsigned stock project. Its placeholder bundle
+        # must not replace a custom identity saved in the installer's shared Local
+        # directory. Real selections made in Xcode still take precedence.
+        is_stock_project = not choices.get("team") and choices.get("bundle") == DEFAULT_BUNDLE
+        if not is_stock_project:
+            saved.update(choices)
     return saved
 
 

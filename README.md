@@ -15,7 +15,9 @@ Copying a filename, path or URL alone does not upload the underlying file.
 The [native iPhone app](ios/README.md) keeps this web interface and adds a native
 **Files** screen. Hold one file, tap others with a second finger, then switch
 apps and drop. It also provides Quick Look and multi-file sharing. Install or
-renew it from your Mac using `bash ios/Install-PrivMsg.command` and Xcode.
+renew it from your Mac using `bash Install-PrivMsg.command` and Xcode. The root
+installer also works as a standalone download and keeps its project under
+`~/Developer/PrivMsg-iOS`.
 Adding the website to the Home Screen alone does not provide the native layer.
 
 References: [Apple drag-item delivery](https://developer.apple.com/documentation/uikit/data-delivery-with-drag-and-drop),

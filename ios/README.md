@@ -6,6 +6,11 @@ later on iPhone and iPad. This is source code for an Xcode development install.
 
 ## Install from the package
 
+The repository's top-level `Install-PrivMsg.command` can be downloaded alone.
+Run it with `bash ~/Downloads/Install-PrivMsg.command`. It downloads a pinned
+source revision to `~/Developer/PrivMsg-iOS`, then runs the installer below.
+It reuses signing settings across revisions and never resets an existing checkout.
+
 1. Extract the entire package on your Mac. Keep the folders together.
 2. Open full Xcode once and finish its setup. The Xcode version must support the
    iOS version installed on your phone. Sign in under Xcode Settings > Accounts.
