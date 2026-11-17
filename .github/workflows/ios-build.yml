@@ -1,0 +1,33 @@
+name: iOS build
+on:
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-build.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-build.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  simulator:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check web bridge
+        run: node --test tests/clipboard.test.mjs ios/tests/native-bridge.test.mjs
+      - name: Generate and validate Xcode project
+        run: |
+          python3 ios/generate_project.py
+          python3 ios/validate_project.py
+          bash -n ios/Install-PrivMsg.command
+      - name: Compile for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/PrivMsg.xcodeproj -scheme PrivMsg -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/PrivMsgDerivedData" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
